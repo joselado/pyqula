@@ -91,6 +91,18 @@ def test_chain_and_cubic():
     check(h,[[1,1,0],[0,1,1],[1,0,1]]) # two cells, along face diagonals
 
 
+def test_matrix_a_rounding_error_from_integers():
+    """A supercell matrix computed in floating point, with its entries a
+    rounding error below the integers (1.9999999999998 for 2), is the
+    supercell of those integers, and a matrix with an entry far from an
+    integer is refused instead of truncated to another supercell"""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(0.2)
+    check(h,np.array(SQRT3,dtype=float)*(1.-1e-13))
+    with pytest.raises(ValueError):
+        h.get_supercell(np.array(SQRT3,dtype=float)+0.5*np.identity(3))
+
+
 def test_same_as_the_supercell_of_the_geometry():
     """For a model the geometry builds by itself, the supercell of h and
     the Hamiltonian of the supercell geometry are the same matrices up to

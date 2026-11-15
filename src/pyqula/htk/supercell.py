@@ -64,7 +64,13 @@ def matrix_supercell(hin,M,sparse=True):
     h = hin.get_multicell() # a copy
     if h.dimensionality==0: return h
     dim = h.dimensionality
-    gs = h.geometry.get_supercell(np.array(M,dtype=int),store_primal=True)
+    # rounded and not truncated, so that a matrix computed in floating
+    # point, with 1.9999999999 for 2, is the matrix of those integers
+    Mf = np.array(M,dtype=float)
+    if not np.all(np.abs(Mf-np.round(Mf))<1e-6): # also refuses a nan
+        raise ValueError("the supercell matrix must have integer entries, "
+                "got "+str(Mf.tolist()))
+    gs = h.geometry.get_supercell(np.round(Mf).astype(int),store_primal=True)
     Ms,replicas,primal = get_supercell_map(gs,h.geometry)
     M3,P,Q,n = supercell_shape(Ms,dim)
     Minv = np.linalg.inv(M3.astype(float))
