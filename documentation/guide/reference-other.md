@@ -102,9 +102,12 @@ Optional arguments:
   positions; `None` is first neighbors with $J=1$
 - Jm=[1.,1.,1.]: diagonal weights $(J_x,J_y,J_z)$ multiplying `Jij`; use
   different values for XXZ or Ising anisotropy
-- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
-  distance is coupled, the periodic images included, and none beyond it;
-  `None` is every pair of a finite system and 5.0 for a periodic one
+- rcut=None: for a function `Jij(r1,r2)` or a `HoppingGenerator`, every
+  pair of sites up to this distance is coupled, the periodic images
+  included, and none beyond it; `None` is every pair of a finite system and
+  5.0 for a periodic one. A site is not coupled with itself, only with its
+  periodic images. A list of shells reaches its last shell, and `rcut` with
+  a list raises `TypeError`
 
 Modifies `sm` in place, no return value
 
@@ -227,9 +230,12 @@ Optional arguments:
   value is repulsive and a negative one attractive. It accepts everything
   that `tij` of `g.get_hamiltonian()` accepts, or a function `Jij(r1,r2)`
   of two positions
-- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
-  distance is coupled, the periodic images included, and none beyond it;
-  `None` is every pair of a finite system and 5.0 for a periodic one
+- rcut=None: for a function `Jij(r1,r2)` or a `HoppingGenerator`, every
+  pair of sites up to this distance is coupled, the periodic images
+  included, and none beyond it; `None` is every pair of a finite system and
+  5.0 for a periodic one. A site is not coupled with itself, only with its
+  periodic images. A list of shells reaches its last shell, and `rcut` with
+  a list raises `TypeError`
 
 Modifies `lg` in place, no return value
 
@@ -408,9 +414,12 @@ Optional arguments:
   `LatticeGas.add_interaction()`). It accepts everything that `tij` of
   `g.get_hamiltonian()` accepts, or a function `Jij(r1,r2)` of two
   positions
-- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
-  distance is coupled, the periodic images included, and none beyond it;
-  `None` is every pair of a finite system and 5.0 for a periodic one
+- rcut=None: for a function `Jij(r1,r2)` or a `HoppingGenerator`, every
+  pair of sites up to this distance is coupled, the periodic images
+  included, and none beyond it; `None` is every pair of a finite system and
+  5.0 for a periodic one. A site is not coupled with itself, only with its
+  periodic images. A list of shells reaches its last shell, and `rcut` with
+  a list raises `TypeError`
 
 Modifies `li` in place, no return value
 

@@ -330,7 +330,10 @@ $$H_H = i t\sum_{\langle\langle ij\rangle\rangle}\nu_{ij}\, c^\dagger_i c_j ,
 
 where $\mathbf d_1$ and $\mathbf d_2$ are the two first-neighbor bonds that
 go from $i$ to $j$. In the honeycomb lattice $\nu_{ij}=\pm\sqrt3/2$, the
-sign given by the direction of the turn. It breaks time-reversal symmetry
+sign given by the direction of the turn. When two sites have several common
+neighbors, $\nu_{ij}$ is the average over these paths: on the honeycomb and
+kagome lattices there is one path, and on the triangular and square
+lattices the two paths cancel, so the term is zero there. It breaks time-reversal symmetry
 and opens a gap of $9t$ at both Dirac points, and the result is a Chern
 insulator with $C=\pm1$ (see
 [Topological invariants](topological-invariants.md)).
@@ -483,7 +486,8 @@ Arguments
 - nsuper: a number or one number per direction multiplies the lattice vectors.
   A 3x3 integer matrix $M$ gives a general supercell, with lattice vectors
   $\mathbf a'_i=\sum_j M_{ij}\mathbf a_j$, for example `[[2,1,0],[-1,1,0],[0,0,1]]`
-  for the $\sqrt3\times\sqrt3$ cell of the honeycomb lattice
+  for the $\sqrt3\times\sqrt3$ cell of the honeycomb lattice. On a lattice of
+  dimension $d$ a $d\times d$ matrix is the same, `[[2,1],[-1,1]]` here
 
 At a momentum $\mathbf k_S$ of the supercell the bands are those of `h` at the
 $|\det M|$ momenta $M^{-1}(\mathbf k_S+\mathbf q)$ that fold onto it.
@@ -531,6 +535,10 @@ Optional arguments
   exchange of the two positions; otherwise it raises `ValueError`
 - d=[0.,0.,1.]: the d-vector of a triplet pairing, a 3-vector or a function
   of the position
+- rcut=None: for a function `mode`, the distance the pairing reaches; a
+  pair of sites farther than `rcut` has no pairing. `None` is 5.0 in a
+  periodic system and every pair in a finite one. With a named `mode` it
+  raises `TypeError`
 
 A `delta` or `d` that depends on the position must have the periodicity of
 the lattice, otherwise it raises `ValueError`. A modulated pairing is built

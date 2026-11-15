@@ -134,6 +134,11 @@ The main keywords are:
 - `nk`: the number of k-points per direction used to compute the expectation
   values. A metal needs more k-points than an insulator.
 - `maxerror`, `mix`: the convergence tolerance and the mixing.
+- `constrains`: terms removed from the mean field at every iteration, by
+  name. For example `["no_net_moment"]` removes the uniform exchange field,
+  the average over the sites of the spin part, so the loop cannot fall to a
+  ferromagnet and a modulated or antiferromagnetic state is kept. An
+  unknown name raises an error with the list of accepted ones.
 
 If the loop does not converge, the method raises an error instead of
 returning a Hamiltonian. The page [Exchange interactions](exchange.md) discusses this

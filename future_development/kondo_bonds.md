@@ -62,6 +62,14 @@ relative check. For one moment per cell, or a uniform cell, nothing moves;
 a non-uniform cell can now stop a few iterations earlier, at the same
 tolerance.
 
+Changed on 15 November 2026 (the eighth sweep, `bug_audit_8.md`): with a global residual a
+small but genuine field converged only to `maxerror` times the largest field, so each field is
+again measured relative to its own size, with a floor that the maintainer chose: a field is
+measured against at least a tenth of the largest field, so a field zero by symmetry, or one
+smaller than a tenth of the largest, counts as converged once it moves by less than
+`maxerror/10` times the largest field. The total energy of the loop is the grand potential at
+the smearing T, and the loop stores its T and k-mesh on the result.
+
 ## What was measured
 
 `tests/kondolattice/test_kondolattice_bonds.py`, 14 tests, about 25 s:
