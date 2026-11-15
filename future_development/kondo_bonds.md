@@ -205,7 +205,8 @@ and 2D also landed in the single-cell storage, took the same route:
 cell that holds a pair within `rcut` and drops the pairs beyond it; three
 more tests hold `NNG(g,[0,J2])` against the list on the one-site chain, and
 the couplings of the finite ladder of
-`examples/classicalspin/modulated_ladder` are unchanged. Still open: the
-hoppings built with `mgenerator` and the default `nc=2` (for instance in
-`specialhamiltonian.py`), which have the range of the old shells and were
-not checked.
+`examples/classicalspin/modulated_ladder` are unchanged. The hoppings built
+with `mgenerator` and the default `nc=2`, and more generally with a
+function on the single-cell storage, were checked the same night and do
+drop couplings on small cells; that is recorded, with a measurement and the
+options, in `hopping_range.md`.

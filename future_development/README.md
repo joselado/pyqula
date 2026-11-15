@@ -678,8 +678,8 @@ already reached once.
   repairs all six. The classical spin, Ising and lattice-gas couplings
   given as a function or a `HoppingGenerator` take every pair within
   `rcut=` since 15 November 2026. Open: the composite fermion of a bond,
-  the notebook, and the electronic hoppings built with `mgenerator` and the
-  default `nc=2`.
+  the notebook; the electronic hoppings of a function or a generator, which
+  drop farther cells too, are in `hopping_range.md`.
 
 - [`inplane_valley.md`](inplane_valley.md) -- the check of `valley_x`,
   `valley_y` and `add_valley_exchange`, and their replacement by a closed
