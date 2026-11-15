@@ -386,7 +386,6 @@ def test_fixed_chemical_potential_needs_the_states_below_it():
     without a message, while a filling that needs them raises. The fixed
     mu must raise the same way, and a mu below the highest kept state
     must not"""
-    from pyqula.scftk import sparsemeanfield
     from pyqula.ultracelltk.basis import FoldedBasis
     from pyqula.ultracelltk.meanfield import SparseBackend
     g = geometry.honeycomb_lattice()
@@ -394,8 +393,7 @@ def test_fixed_chemical_potential_needs_the_states_below_it():
     hs = h.get_supercell([3,2])
     hs.ultracell_basis = FoldedBasis(h,hs,emax=0.5)
     n = hs.intra.shape[0]
-    v = sparsemeanfield.interaction(hs,U=np.ones(len(hs.geometry.r)))
-    needed = sparsemeanfield.needed_entries([v],n)
+    needed = {(0,0,0): (np.arange(n),np.arange(n))}
     for mu,raises in [(1.0,True),(-2.0,False)]:
         h2 = hs.copy() ; h2.shift_fermi(-mu)
         b = SparseBackend(nk=2,T=1e-7)
