@@ -233,10 +233,11 @@ def test_a_bond_that_decays_does_not_stop_the_loop():
     """The half-filled chain with an onsite and a first-neighbor coupling:
     with particle-hole symmetry and the onsite field, <c^dag_{j+1} f_j>
     vanishes, so the neighbor fields decay from the seed to zero while the
-    onsite one converges. The convergence check is relative to the largest
-    field, so the loop stops, with the onsite field of the onsite model
-    and the neighbor fields below the tolerance; relative to its own size
-    a decaying field never converges"""
+    onsite one converges. Relative to its own size a field at roundoff
+    never converges, so a field counts as converged once it moves by less
+    than a precision of 1e-10 times the largest field, and the loop
+    stops, with the onsite field of the onsite model and the neighbor
+    fields below the tolerance"""
     def J(rc, rm):
         d = np.linalg.norm(rc - rm)
         if d < 1e-6: return 4.0
@@ -249,6 +250,45 @@ def test_a_bond_that_decays_does_not_stop_the_loop():
     assert abs(V0) > 1.8
     assert abs(h1.hybridization[0] - V0) < 1e-4
     assert np.max(np.abs(h1.hybridization[1:])) < 1e-5*abs(V0)
+
+
+J_SMALL = 1e-4 # a weak coupling to the next cell, see below
+
+
+def weak_neighbor(rc, rm):
+    """Onsite J0, and J_SMALL to the conduction electron of the next cell
+    only"""
+    d = rc - rm
+    if np.linalg.norm(d) < 1e-6: return J0
+    if np.linalg.norm(d - np.array([1., 0., 0.])) < 1e-6: return J_SMALL
+    return 0.0
+
+
+def test_a_small_field_converges_relative_to_its_own_size():
+    """The chain with the onsite coupling J0 and a weak coupling J_SMALL
+    to the next cell. The onsite field makes <c^dag_{j+1} f_j> finite, so
+    the weak bond has a small but genuine field, linear in J_SMALL, of
+    order 1e-5 of the onsite one. Its fixed point is taken from a tight
+    run. The loop then starts from the converged onsite field and
+    multiplier and from zero on the weak bond, so the weak field is the
+    one that has to converge. At maxerror=1e-4 it must come out with an
+    error of order 1e-4 relative to itself. A residual relative to the
+    largest field stops the loop once the weak field moves by less than
+    1e-4 times the onsite one, after a few iterations at most, with a
+    relative error of 0.1 or more"""
+    h = chain_kondo()
+    href, e = converge(h, weak_neighbor) # maxerror=1e-10
+    assert href.kondo_bonds == [(0, 0, (0, 0, 0), J0),
+            (0, 0, (1, 0, 0), J_SMALL)]
+    Vref = href.hybridization
+    ratio = abs(Vref[1])/abs(Vref[0])
+    assert abs(Vref[0]) > 0.3 and 1e-6 < ratio < 1e-3, Vref # small, genuine
+    maxerror = 1e-4
+    seed = (np.array([Vref[0], 0.0]), href.constraint_lambda)
+    h2 = h.get_mean_field_hamiltonian(J=weak_neighbor, filling=FILLING,
+            nk=NK, T=T, mf=seed, maxerror=maxerror, maxite=4000)
+    err = abs(h2.hybridization[1] - Vref[1])/abs(Vref[1])
+    assert err < 20*maxerror, (err, h2.hybridization, Vref)
 
 
 def unfolded(h, n):

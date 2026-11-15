@@ -65,6 +65,40 @@ from ..multihopping import MultiHopping
 N_SPIN = 2 # N in the large-N Coqblin-Schrieffer coupling J/N: the number of
            # spin components of a spin-1/2 (Q=1) local moment
 
+FIELD_PRECISION = 1e-10 # precision of a field relative to the largest one:
+           # a field is a sum over the k-mesh and the states, so it is known
+           # to roundoff times the largest field at best, and a field that
+           # vanishes by symmetry sits there (see field_residual). 1e-10
+           # leaves a wide margin over the roundoff of a large mesh, and a
+           # tolerance at or below it keeps the residual relative to the
+           # largest field
+
+
+def field_residual(V, target, maxerror):
+    """Largest change of the fields V towards their targets, each one
+    relative to its own size max(|V_b|, |target_b|), as the field of a
+    single moment converges, so that a small but genuine field converges
+    to maxerror relative to itself and not to maxerror times the largest
+    field.
+
+    The size of a field is taken as at least FIELD_PRECISION/maxerror
+    times the largest field: a field that vanishes by symmetry (the
+    first-neighbor bond of a particle-hole symmetric chain with an onsite
+    V) sits at roundoff, where its relative change is of order one at
+    every iteration, so it counts as converged once it moves by less than
+    FIELD_PRECISION times the largest field. The floor follows the largest
+    field, so a trajectory where every V decays together towards V=0
+    still has a constant residual and does not converge. With one field
+    the floor is never reached and the residual is that of the field."""
+    V = np.asarray(V)
+    if len(V) == 0: return 0.0 # no bonds, nothing to converge
+    size = np.maximum(np.abs(V), np.abs(target)) # of each field
+    vmax = np.max(size)
+    if vmax == 0.0: return 0.0 # all exactly zero
+    if maxerror > FIELD_PRECISION: floor = vmax*(FIELD_PRECISION/maxerror)
+    else: floor = vmax # a tolerance this tight is below the precision
+    return np.max(np.abs(target - V)/np.maximum(size, floor))
+
 
 def hs_constant(V, J):
     """Hubbard-Stratonovich constant of the Coqblin-Schrieffer decoupling.
@@ -365,18 +399,10 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
         # and reports non-convergence (the caller can re-run unseeded to
         # get the exact V=0 answer directly, or increase maxite).
         #
-        # The scale is the largest field of all the bonds, not the field of
-        # each bond: a bond whose V vanishes by symmetry (the first-neighbor
-        # bond of a particle-hole symmetric chain with an onsite V) sits at
-        # roundoff, where its own relative change is of order one at every
-        # iteration and would never converge. A trajectory where every V
-        # decays together still has a constant residual
-        target = -Jg*A
-        if len(V) == 0: v_resid = 0.0 # no bonds, nothing to converge
-        else:
-            vscale = max(np.max(np.abs(V)), np.max(np.abs(target)))
-            if vscale == 0.0: vscale = 1.0 # all exactly zero
-            v_resid = np.max(np.abs(target - V))/vscale
+        # Each field is relative to its own size, down to a floor that
+        # follows the largest field, for a field that vanishes by symmetry
+        # (see field_residual)
+        v_resid = field_residual(V, -Jg*A, maxerror)
         return max(v_resid, np.max(np.abs(nfocc - Q)))
 
     def pack(h, V, lam, nfocc, converged):
