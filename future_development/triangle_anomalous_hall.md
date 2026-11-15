@@ -279,5 +279,7 @@ no such cancellation.
   density matrix.
 - The user guide section (in the topological invariants page), the
   reference entry and the example `examples/2d/anomalous_hall/main.py` are
-  written. The README FUNCTIONALITIES bullet and its notebook are not,
-  since a bullet there comes with its own executed notebook.
+  written, and since 15 November 2026 the README FUNCTIONALITIES bullet
+  and its notebook, `topological_characterization/16_anomalous_hall.ipynb`,
+  with the Haldane model against the Fermi energy and a heatmap against the
+  Fermi energy and the staggered energy M, across M_c = 4.5 t2.

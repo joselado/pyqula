@@ -369,7 +369,8 @@ already reached once.
   there, in a metal at T = 0, the grid error averages out over kz and the
   grid beats the tetrahedra (1e-4 at nk = 64 against 7e-4), while the
   tetrahedra converge smoothly at second order and extrapolate to 2e-5.
-  Open: band crossings, qtci, the README bullet and its notebook.
+  Open: band crossings and qtci; the README bullet and its notebook are
+  written since 15 November 2026.
 
 - [`tetrahedron_susceptibility.md`](tetrahedron_susceptibility.md) -- the
   triangle and tetrahedron bare susceptibility, `integration="triangle"` of

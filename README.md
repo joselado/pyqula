@@ -146,6 +146,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Bott and spin Bott indices of disordered systems [[notebook]](jupyter-notebooks/functionalities/topological_characterization/13_bott_index.ipynb)
 - Invariants from symmetry eigenvalues [[notebook]](jupyter-notebooks/functionalities/topological_characterization/14_symmetry_eigenvalues.ipynb)
 - Chern numbers of magnon and exciton bands [[notebook]](jupyter-notebooks/functionalities/topological_characterization/15_magnon_exciton_chern.ipynb)
+- Anomalous Hall conductivity of metals [[notebook]](jupyter-notebooks/functionalities/topological_characterization/16_anomalous_hall.ipynb)
 
 ## Response functions ##
 - Optical conductivity from the Kubo-Greenwood formula [[notebook]](jupyter-notebooks/functionalities/response_functions/01_optical_conductivity.ipynb)
