@@ -709,7 +709,8 @@ already reached once.
 - [`ultra_long_range.md`](ultra_long_range.md) -- the plan of 14 November
   2026 for the ultra long-range method of arXiv:2008.12573, the ultracell,
   in a tight-binding basis, and what its stage 1 built the same day
-  (`h.get_ultracell()`, non-interacting, 17 tests). It records that with every
+  (`h.get_ultracell()`, non-interacting, 17 tests) and its stage 2, the
+  mean field through `scftk` (6 tests). It records that with every
   band kept the method is the modulated supercell in the eigenbasis of the
   clean one (1e-14 in a prototype, odd and even ultracells), that it buys
   speed only for unit cells with many orbitals (a factor 8 in dimension on
@@ -718,7 +719,8 @@ already reached once.
   decisions: the first taken by the maintainer (a supercell to project in
   stage 1, harmonics of functions in stage 3), three more taken as the
   recommended defaults in stage 1 (`emax=`, per unit cell,
-  `get_ultracell`), and the basis of the mean field left to stage 2.
+  `get_ultracell`), and the basis of the mean field, rebuilt from its
+  lattice-periodic part, decided on the measurement of stage 2.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

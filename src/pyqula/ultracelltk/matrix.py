@@ -42,7 +42,7 @@ def eigenstates(basis,hk,kS):
     returned padded, (N,bmax,nstates), as coefficients c_{q,m} of the
     folded Bloch states, together with the unit-cell vectors U of
     basis.states, so that phi_q = U_q c_q"""
-    E,U,valid = basis.states(kS)
+    E,U,valid = basis.states(kS,hk)
     H = ultracell_matrix(basis,hk,kS,E,U,valid)
     es,vs = eigh(H)
     N,bmax = valid.shape

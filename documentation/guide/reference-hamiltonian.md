@@ -490,6 +490,9 @@ Optional arguments:
 
 - emax=None: keep the states of the unit cell with energy up to `emax`;
   `None` keeps all of them, and the result is the supercell exactly
+- rebuild_basis=False: with `True`, take at each momentum the states of the
+  lattice-periodic part of `hs` instead of those of the unit cell, as many
+  as the cut keeps
 
 ## h.add_pairing()
 Add a superconducting pairing term with a given symmetry. The Hamiltonian

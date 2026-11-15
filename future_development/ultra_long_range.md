@@ -6,8 +6,9 @@ stages, the tests, and the decisions left to the maintainer. The method is that 
 T. Müller, S. Sharma, E. K. U. Gross and J. K. Dewhurst, Phys. Rev. Lett. 125, 256402
 (2020), arXiv:2008.12573, read from the TeX source. defuqumat has the plane-wave version
 in its `ultracell` subpackage, which is where the design choices below were compared. The conventions were checked in a scratch prototype on 14 November 2026,
-against the explicit supercell of pyqula. Stage 1 was built the same day (see "What stage
-1 built"); stages 2 to 4 are not. The next decision point is the list at the end.
+against the explicit supercell of pyqula. Stages 1 and 2 were built the same day (see
+"What stage 1 built" and "What stage 2 built"); stages 3 and 4 are not. The next decision
+point is the list at the end.
 
 ## What stage 1 built
 
@@ -48,6 +49,89 @@ The guide page is `documentation/guide/ultracell.md`, with the figures
 `ultracell_unfolding.py` and `ultracell_ldos.py`, the example
 `examples/2d/ultracell/main.py`, and the notebook
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/14_ultracell_long_range.ipynb`.
+
+## What stage 2 built
+
+`u.get_mean_field_hamiltonian(...)` runs the mean field of `scftk` on the supercell with a
+new density-matrix backend, `integration="ultracell"` (`ultracelltk/meanfield.py`). The
+plan above named three changes; the code needed different ones. `VJinteraction` needed no
+change: with an integration name other than `"ed"` or `"kpm"`, `h.get_mean_field_hamiltonian`
+already routes a spinful Hamiltonian to `Vinteraction`, which takes U, V1, V2, V3 and Vr. What
+`scftk/densitydensity.py` needed is three entry points, each a branch of the same shape as
+the `"qtci"` and `"triangle"` ones: the registry of `get_dm`, the Fermi search for a filling
+(from the ultracell eigenvalues, the states above `emax` counted as empty, and a
+`ValueError` when the filling needs them), and, after the loop, the full density matrix
+and the band energy. The folded basis travels on the supercell Hamiltonian as the
+attribute `ultracell_basis`, which `copy()`, a deepcopy, keeps. The density matrix comes
+out of `densitymatrix._accumulate_dm_batch`, the kernel of `"ed"`, fed with the ultracell
+states written on the supercell orbitals, so it has the conventions of `"ed"` by
+construction (the transpose of `full_dm` included).
+
+Decision 5 was measured and then taken by the maintainer: the basis is rebuilt at every
+iteration from the lattice-periodic part of the current Hamiltonian, the block of each
+folded momentum on itself, with as many states per momentum as the clean cut keeps,
+a degenerate level kept whole, and skipped without a cut (`rebuild_basis=True`, the default of the mean field; the result keeps it, so its
+observables use the basis of the loop). The measurement, the antiferromagnet of graphene at
+$U=3t$ under $0.3\cos(2\pi x_1/8)$, $8\times1$ cells, `nk=3`, moment about 0.47:
+
+| emax | rows of 32 | moment error, clean basis | moment error, rebuilt basis |
+|---|---|---|---|
+| 0.5 | 16 | 0.41 | 0.004 |
+| 1.0 | 18 | 0.37 | 0.002 |
+| 1.5 | 22 | 0.29 | 0.002 |
+| 2.0 | 26 | 0.08 | 0.0005 |
+| 2.5 | 30 | 0.05 | 0.0003 |
+
+The energy errors follow the same pattern (0.46 against 0.009 at `emax=0.5`, 0.15
+against $10^{-5}$ at 2.5). The clean basis loses the antiferromagnet because the
+staggered field mixes the two bands of graphene at every momentum, and the cut removes
+part of the upper one. The whole rebuilt runs took 1.3 to 3.7 times longer than the clean
+ones (7.0 s against 1.9 s at `emax=0.5`, 6.9 s against 5.5 s at 2.0), but the two
+converged to different states in different numbers of iterations, so the cost per
+iteration was not measured; the extra work is the $N$ projections of the orbital Bloch
+sums, in a Python loop.
+
+`tests/ultracell/test_ultracell_meanfield.py` (6 tests) pins: the Hubbard antiferromagnet
+of a $3\times2$ cell with every state against `integration="ed"` from the same guess, energy
+and Hamiltonian to $10^{-8}$, for both bases; a first-neighbor V1 on a chain, whose Fock
+terms modulate the hoppings, against `"ed"`; the linear response to $10^{-4}\cos(2\pi
+x_1/4)$ on a gapped honeycomb lattice against `chiAB_q` at $U=0$ and against
+`densitychi_RPA` about the converged mean-field state at $U=1$, both on the same mesh, to
+$10^{-3}$ relative (the measured agreement is at the printed digits, $10^{-10}$
+absolute); the cut converging with `emax` with the rebuilt basis and the clean one losing
+the moment; and the errors. The first comparison of the response was wrong on two
+counts, both in the test and not in the code: the potential's harmonic carries the phase of
+each site's position, so $V_{\mathbf Q}$ has to be taken from `get_harmonics` of the
+potential; and at finite $U$ the response is the RPA about the mean-field state, whose gap
+is smaller than the bare one, so its response is larger than the bare one even though
+the Hartree kernel screens. A Hartree loop written by hand agreed with `scftk` to $10^{-10}$ on
+that second point.
+
+The guide has a section with a figure, and its example changed twice on the way, which is
+worth recording. The first one, graphene at $U=2.5t$ under $0.6\cos(2\pi x_1/24)$ on the
+mesh `nk=3`, showed the staggered moment reversing between antiphase domain walls where
+the potential dopes the lattice. It does not survive a finer mesh: with `nk=[2,12]` there
+is no reversal, with `[2,24]` a small one, and at $U=3t$, $V_0=1.5t$ the loop did not
+converge on `[2,24]`. The ultracell is 24 cells long along $\mathbf a_1$ but one cell
+along $\mathbf a_2$, so a region the potential dopes into a metal needs a fine mesh along
+$\mathbf a_2$, and `nk=3` gave three points there. A charge density wave chain under a
+slow potential converged in the mesh but into an irregular pattern in the doped regions,
+which may be a metastable state of the loop. The example kept in the guide is a
+paramagnetic insulator, the honeycomb lattice with a sublattice imbalance of $\pm1$, under
+an exchange field $0.05\cos(2\pi x_1/24)\sigma_z$: $U=1.5t$ enhances the induced moment by
+1.822 on `nk=[2,12]` and 1.821 on `[2,24]`, with the loop at `maxerror=1e-5` and `1e-9`
+within $4\times10^{-5}$. A random initial guess left an in-plane moment of $1.8\times10^{-5}$
+that the default tolerance did not remove, and gave 1.85 instead; the guess `ferroZ` gives
+an in-plane moment of $10^{-16}$. To make the mesh per direction possible, the ultracell
+observables now take `nk` as one number or one per direction, as `klist.kmesh` does.
+
+Open after stage 2: the spin-spin exchange `J1`, `J2`, `J3`, `Jr` (refused with a
+`NotImplementedError`; only `VJinteraction` has it, and it fixes
+`integration="ed"` for its own loop); Nambu; the constraint
+$\int\mathbf m_{\mathbf Q=0}=0$; and size, since the loop of `generic_densitydensity`
+makes the supercell dense (`get_dense`), so its memory grows as $(N N_\mathrm{orb})^2$ per
+direction whatever the cut. The ultracell mean field is therefore for supercells of up to a
+few thousand orbitals until stage 3.
 
 ## The method, and what it becomes in a tight-binding basis
 
@@ -331,5 +415,6 @@ Each comes with a recommendation; they are handed over one at a time.
 4. The public name: `h.get_ultracell(hs,emax=None)`, as in defuqumat, taken in stage 1 as
    the recommended default.
 5. Whether the mean field rebuilds the basis with the $\mathbf Q=0$ part at every
-   iteration, or keeps the basis of the clean `h` frozen as Elk does. To be measured in
-   stage 2 before it is decided.
+   iteration, or keeps the basis of the clean `h` frozen as Elk does. Measured in stage 2
+   (see "What stage 2 built") and decided by the maintainer on 14 November 2026: rebuilt by
+   default, with the clean basis as an option.

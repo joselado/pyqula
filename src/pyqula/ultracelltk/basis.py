@@ -67,10 +67,15 @@ def cut_window(e,emax,tol=1e-7):
     so that a degenerate level is kept whole: a level split by the cut
     would leave an arbitrary part of its subspace in the basis"""
     if emax is None: return np.arange(len(e))
-    nkeep = int(np.sum(e<=emax))
+    return np.arange(complete_level(e,int(np.sum(e<=emax)),tol=tol))
+
+
+def complete_level(e,nkeep,tol=1e-7):
+    """The number of sorted levels e to keep, nkeep raised so that the last
+    kept level is not split from the next one by the cut"""
     while 0<nkeep<len(e) and abs(e[nkeep]-e[nkeep-1])<tol*max(1.,abs(e[nkeep])):
         nkeep += 1 # the next level is degenerate with the last one kept
-    return np.arange(nkeep)
+    return nkeep
 
 
 class FoldedBasis():
@@ -136,19 +141,43 @@ class FoldedBasis():
                 raise TypeError("emax must be a number or None, got "
                         +repr(emax))
         self.emax = emax
+        self.rebuild = False # the clean states, see states()
     def folded_momenta(self,kS):
         """The N momenta p_q = (k_S+q)/n, in reduced coordinates of the
         unit cell, one row per q"""
         return (pad3(kS)[None,:] + self.q)/self.n[None,:]
-    def states(self,kS):
-        """The unit-cell states kept at every folded momentum, padded to
-        the largest number kept: energies (N,bmax), vectors
-        (N,norb,bmax), and the mask (N,bmax) of the ones that exist"""
+    def states(self,kS,hk=None):
+        """The states kept at every folded momentum, padded to the largest
+        number kept: energies (N,bmax), vectors (N,norb,bmax), and the mask
+        (N,bmax) of the ones that exist. They are the states of the clean
+        unit cell, or, with self.rebuild, a cut, and the supercell Bloch
+        Hamiltonian hk at kS, the states of its lattice-periodic part.
+        Without a cut both span every orbital, and the clean states are
+        returned"""
+        if self.rebuild and hk is not None and self.emax is not None:
+            return self.rebuilt_states(kS,hk)
+        return self.clean_states(kS)
+    def rebuilt_states(self,kS,hk):
+        """The states of the lattice-periodic part of hk, the block of each
+        folded momentum on itself in the orbital Bloch basis, as many per
+        momentum as the cut keeps in the clean unit cell, completed so that
+        a degenerate level is kept whole. A lattice-periodic part of the
+        modulation or of a mean field (a uniform moment, a uniform shift)
+        is then in the basis, and does not have to be built from the states
+        the cut leaves out"""
+        E0,U0,valid0 = self.clean_states(kS)
+        counts = np.sum(valid0,axis=1)
+        I = [np.identity(self.norb,dtype=np.complex128)]*self.N # every orbital
         es,ws = [],[]
-        for p in self.folded_momenta(kS):
-            e,w = eigh(dense(self.hk0(p)))
-            idx = cut_window(e,self.emax)
-            es.append(e[idx]) ; ws.append(w[:,idx])
+        for iq in range(self.N):
+            B = self.basis_block(kS,I,iq) # orbital Bloch sums of this q
+            heff = np.conjugate(B.T)@np.asarray(hk@B) # block of q on itself
+            e,w = eigh(0.5*(heff+np.conjugate(heff.T)))
+            c = complete_level(e,int(counts[iq]))
+            es.append(e[0:c]) ; ws.append(w[:,0:c])
+        return self.pad(es,ws)
+    def pad(self,es,ws):
+        """Pad the states of every folded momentum to the largest number"""
         bmax = max([len(e) for e in es])
         if bmax==0:
             raise ValueError("no state of the unit cell is below emax="
@@ -160,6 +189,15 @@ class FoldedBasis():
             b = len(es[i])
             E[i,0:b] = es[i] ; U[i,:,0:b] = ws[i] ; valid[i,0:b] = True
         return E,U,valid
+    def clean_states(self,kS):
+        """The states of the clean unit cell up to emax at every folded
+        momentum, padded as in states()"""
+        es,ws = [],[]
+        for p in self.folded_momenta(kS):
+            e,w = eigh(dense(self.hk0(p)))
+            idx = cut_window(e,self.emax)
+            es.append(e[idx]) ; ws.append(w[:,idx])
+        return self.pad(es,ws)
     def phase(self,kS):
         """exp(2 pi i (k_S/n).R) on every orbital of the supercell"""
         return np.exp(2j*np.pi*(self.R@(pad3(kS)/self.n)))

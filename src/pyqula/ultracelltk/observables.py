@@ -19,9 +19,13 @@ from .matrix import eigenstates, real_space_states
 
 
 def check_nk(nk):
-    if int(nk)!=nk or nk<1:
-        raise ValueError("nk must be a positive integer, got "+repr(nk))
-    return int(nk)
+    """nk is one positive integer, the same in every direction, or one per
+    direction, as klist.kmesh takes it"""
+    ns = np.atleast_1d(np.asarray(nk)).ravel()
+    if len(ns)==0 or np.any(ns<1) or np.any(ns!=np.round(ns)):
+        raise ValueError("nk must be a positive integer or one per "
+                "direction, got "+repr(nk))
+    return int(ns[0]) if np.ndim(nk)==0 else [int(n) for n in ns]
 
 
 def check_delta(delta):
@@ -68,7 +72,8 @@ def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
     ks = ultracell_kmesh(u,nk)
     if delta is None:
         d = u.basis.dimensionality
-        delta = 5./(check_nk(nk)*min(u.basis.n[0:d])) # as dos_kmesh, folded
+        nks = np.zeros(d) + np.atleast_1d(check_nk(nk))[0:d] # per direction
+        delta = 5./min(nks*u.basis.n[0:d]) # as dos_kmesh, on the folded mesh
     check_delta(delta)
     es = np.concatenate([eigenstates(u.basis,u.hk(k),k)[0] for k in ks])
     ys = calculate_dos(es,energies,delta)/(np.pi*len(ks)*u.basis.N)

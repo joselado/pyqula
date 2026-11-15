@@ -3,8 +3,9 @@
 In this page we see how to compute a crystal whose potential, exchange field
 or pairing changes slowly over many unit cells, with the ultracell. We first
 compute the spectral function of graphene under a slow potential. Then we
-compute the local density of states and the charge over a modulation. At the
-end we keep only the low-energy states of a unit cell with many orbitals.
+compute the local density of states and the charge over a modulation. Then
+we keep only the low-energy states of a unit cell with many orbitals. At the
+end we compute a self-consistent mean field over the modulation.
 
 ## A modulation over many cells
 
@@ -93,6 +94,10 @@ The keywords that change the result:
 - `emax=None` in `h.get_ultracell()`: keep the states of the unit cell with
   energy up to `emax`; `None` keeps all of them, which is the supercell
   exactly (see [Keeping only the low-energy states](#keeping-only-the-low-energy-states))
+- `rebuild_basis=False` in `h.get_ultracell()`: with `True`, the states at
+  each momentum are those of the lattice-periodic part of `hs` instead of
+  those of `h`, which only matters with a cut and a modulation whose
+  average over the cells is not zero
 - `energies`, `delta`, `nk` and `kpath` in `u.get_kdos_bands()`: the same as
   in `h.get_kdos_bands()`, with the k-path of the unit cell
 
@@ -176,8 +181,9 @@ The keywords that change the result:
 - `e` and `delta` in `u.get_ldos()`: the energy and the half width of the
   Lorentzian of each level
 - `nk` in `u.get_ldos()`, `u.get_vev()` and `u.get_dos()`: the k-mesh of the
-  ultracell in each direction. The momenta of the unit cell that it samples
-  form a mesh $n$ times denser, so a large ultracell needs a small `nk`
+  ultracell, one number for every direction or one per direction. The
+  momenta of the unit cell that it samples form a mesh $n$ times denser, so
+  a long direction of the ultracell needs few points
 - `operator` in `u.get_vev()`: the operator resolved on each site, a name
   such as `"sz"` or a matrix of the supercell
 
@@ -234,3 +240,84 @@ The cut is in energy and not in band index. Here the lowest band of the moire
 cell reaches $-1.72t$ and the second one starts at $-1.95t$, so the levels
 below $-1.9t$ need both bands. A degenerate level at the cut is kept whole.
 You check the cut by raising `emax` until the numbers you need stop changing.
+
+## Mean field over the modulation
+
+We will now see how a self-consistent mean field responds to a slow
+modulation. `u.get_mean_field_hamiltonian()` runs the mean field of the
+supercell with the keywords of `h.get_mean_field_hamiltonian()` (see
+[Mean-field Hubbard models](mean-field.md)). At each iteration the density
+matrix, the Fermi level and the band energy come from the ultracell states.
+With every state kept, it converges to the mean field of the supercell
+itself. It returns the ultracell of the converged mean-field Hamiltonian, so
+every method above applies to the interacting state.
+
+For concreteness we take a paramagnetic insulator, the honeycomb lattice with
+onsite energies $+1$ on A and $-1$ on B, a gap of $2t$. We apply an exchange
+field $B_0\cos(2\pi x_1/n)\,\sigma_z$ with $B_0=0.05t$ and $n=24$, and see
+how a Hubbard $U=1.5t$ changes the moment it induces:
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # unit cell of the honeycomb lattice
+h = g.get_hamiltonian() # spinful, first-neighbor hopping t=1
+h.add_sublattice_imbalance(1.0) # +1 on A and -1 on B, a gap of 2t
+n = 24 # period of the modulation, in unit cells along a1
+hs = h.get_supercell([n,1]) # the ultracell, written as a supercell
+b1 = np.linalg.inv(np.array([g.a1,g.a2,g.a3]).T)[0] # b1.r is the coordinate along a1
+B0 = 0.05 # amplitude of the exchange field, in units of t
+hs.add_exchange(lambda r: [0.,0.,B0*np.cos(2*np.pi*b1.dot(r)/n)]) # along z
+u = h.get_ultracell(hs) # hs solved in the Bloch states of the unit cell
+nk = [2,12] # k-mesh of the ultracell: the ultracell is 24 cells long along a1
+m0 = u.get_vev(operator="sz",nk=nk) # induced moment without interaction
+u2 = u.get_mean_field_hamiltonian(U=1.5,filling=0.5,mf="ferroZ",nk=nk) # Hubbard U
+m = u2.get_vev(operator="sz",nk=nk) # induced moment with the Hubbard U
+x = np.array([b1.dot(r) for r in u2.hs.geometry.r]) # coordinate along a1
+```
+
+`u2.hs` is the converged mean-field supercell, and `m0` and `m` are the
+moments on each site without and with the interaction. The k-mesh has one
+number per direction. The ultracell is 24 cells long along $\mathbf a_1$
+and one cell along $\mathbf a_2$, so it needs few points along the first
+and more along the second. The initial guess `mf="ferroZ"` is a moment
+along $z$, the axis of the field, so the loop does not have to remove an
+in-plane moment that the field cannot sustain.
+
+![The moment induced by a slow exchange field on a gapped honeycomb lattice, without and with a Hubbard U.](img/ultracell_meanfield.png#only-light)
+![The moment induced by a slow exchange field on a gapped honeycomb lattice, without and with a Hubbard U.](img/ultracell_meanfield-dark.png#only-dark)
+
+The moment follows the field cell by cell, with the opposite sign, since
+`add_exchange` adds $\mathbf B\cdot\boldsymbol\sigma$ and lowers the energy
+of the spin opposite to $\mathbf B$. Without the interaction the largest
+moment is $1.38\times10^{-4}$. With $U=1.5t$ it is $2.51\times10^{-4}$, a
+factor 1.82 larger on both sublattices. The insulator stays paramagnetic,
+and the Hubbard $U$ only enhances its spin response. At linear order, this
+factor is the RPA enhancement of the spin response at the wavevector of the
+field. The factor is 1.82 on the mesh `[2,12]` and on a mesh twice finer
+along $\mathbf a_2$. As for any mean field, check the
+k-mesh before trusting a number: on a lattice that the modulation dopes
+locally, into a metal, the mesh along $\mathbf a_2$ has to be much finer.
+
+??? example "Code of this figure (documentation/figures/ultracell_meanfield.py)"
+
+    ```python
+    --8<-- "ultracell_meanfield.py"
+    ```
+
+The keywords that change the result:
+
+- `U`, `V1`, `V2`, `V3`, `filling`, `mf`, `T`, `mix` and `maxerror`: as in
+  `h.get_mean_field_hamiltonian()`, for a normal-state Hamiltonian
+- `nk=1`: the k-mesh of the ultracell, one number for every direction or
+  one per direction
+- `return_total_energy=False`: also return the total energy of the
+  supercell
+- `rebuild_basis=True`: with a cut, rebuild the basis at each iteration
+  from the lattice-periodic part of the mean field. The states of the clean
+  unit cell miss a uniform moment: for the antiferromagnet of graphene at
+  $U=3t$ cut at `emax=0.5`, they left the moment 0.41 off, and the rebuilt
+  basis 0.004 off
+
+The spin-spin exchange (`J1`, `J2`, `J3`, `Jr`) and the superconducting mean
+fields are not available on the ultracell.

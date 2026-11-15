@@ -555,7 +555,7 @@ Optional arguments:
 - energies: the energies
 - delta=None: broadening; `None` takes the one `h.get_dos()` would use on
   the mesh of the unit cell that the folded momenta form
-- nk=10: k-mesh of the ultracell in each direction
+- nk=10: k-mesh of the ultracell, one number or one per direction
 - write=True: also write `DOS.OUT`
 
 Returns the energies and the density of states
@@ -568,7 +568,7 @@ Optional arguments:
 
 - e=0.0: the energy
 - delta=0.001: broadening
-- nk=10: k-mesh of the ultracell in each direction
+- nk=10: k-mesh of the ultracell, one number or one per direction
 - write=True: also write `LDOS.OUT`
 
 Returns `x`, `y` and the value on each site
@@ -581,7 +581,7 @@ each site.
 Optional arguments:
 
 - operator=None: a name such as `"sz"`, or a matrix of the supercell
-- nk=10: k-mesh of the ultracell in each direction
+- nk=10: k-mesh of the ultracell, one number or one per direction
 
 Returns an array over the sites of the supercell. Not available with Nambu
 
@@ -603,3 +603,23 @@ cell, and the components, one column per site of the unit cell
 ### u.get_hk_gen()
 The function of a momentum of the ultracell, in reduced coordinates of the
 supercell, that returns the ultracell matrix.
+
+### u.get_mean_field_hamiltonian()
+The self-consistent mean field of the supercell, with the density matrix,
+the Fermi level and the band energy of every iteration computed in the
+ultracell states. With every state kept it is the mean field of the
+supercell. Normal state only, without the spin-spin exchange (`J1`, `J2`,
+`J3`, `Jr`).
+
+Optional arguments:
+
+- U, V1, V2, V3, Vr, filling, mu, mf, T, mix, maxerror, maxite: as in
+  `h.get_mean_field_hamiltonian()`
+- nk=1: k-mesh of the ultracell, one number or one per direction
+- rebuild_basis=True: rebuild the basis at each iteration from the
+  lattice-periodic part of the mean field; `False` keeps the states of the
+  clean unit cell, which with a cut miss a uniform order
+- return_total_energy=False: also return the total energy
+
+Returns the `Ultracell` of the converged mean-field supercell, and its total
+energy with `return_total_energy=True`
