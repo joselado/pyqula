@@ -66,3 +66,21 @@ def test_a_dense_start_keeps_the_density_density_loop_sparse(source,
     assert len(calls) > 0 and all(calls)
     assert issparse(scf.hamiltonian.intra)
     assert abs(scf.residual - reference.residual) < 1e-10*reference.residual
+
+
+def test_a_dense_start_keeps_the_exchange_loop_sparse(monkeypatch, tmp_path):
+    """The same for the sparse engine of VJinteraction, which made the
+    Hamiltonian of every iteration sparse again but kept a dense starting
+    mean field dense"""
+    from pyqula.scftk.spinspin import VJinteraction
+    monkeypatch.chdir(tmp_path)
+    dense = _dense_guess()
+    def vj(mf):
+        return VJinteraction(_island(True), U=2.0, J1=0.3, mu=0.0, nk=1,
+                integration="kpm", npol=60, mix=0.5, T=1e-2, maxite=3,
+                mf=mf)
+    reference = vj({d: csr_matrix(m) for (d, m) in dense.items()})
+    calls = _spy(monkeypatch)
+    scf = vj(dense)
+    assert len(calls) > 0 and all(calls)
+    assert abs(scf.residual - reference.residual) < 1e-10*reference.residual

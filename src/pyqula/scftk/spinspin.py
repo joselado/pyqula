@@ -1595,6 +1595,9 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             from ..meanfield import guess
             mf = guess(h0_ref, mode=mf)
         mf = obj2mf(mf)
+        # a dense start would keep the sparse loop dense, and its
+        # convergence check averaged over n^2 entries (as_sparse)
+        if sparse_engine: mf = sparsemeanfield.as_sparse(mf)
 
     ite = 0
     while True:
