@@ -339,10 +339,13 @@ class FoldedBasis():
         Z[self.cell,self.alpha] = ph*Y
         Z = Z.reshape(tuple(self.n)+(self.norb,)+rest)
         Z = np.fft.fftn(Z,axes=(0,1,2)) # sum_R exp(-2 pi i R.M^-1 q)
-        return Z.reshape((self.N,self.norb)+rest)/np.sqrt(self.N)
-    def basis_block(self,kS,U,iq):
+        Z /= np.sqrt(self.N) # in place, no other array of this size
+        return Z.reshape((self.N,self.norb)+rest)
+    def basis_block(self,kS,U,iq,ps=None):
         """The basis vectors of the folded momentum iq on the supercell
-        orbitals, (norbs,bmax)"""
-        p = self.folded_momenta(kS)[iq]
+        orbitals, (norbs,bmax). ps are the folded momenta of kS, which a
+        caller that builds many blocks computes once"""
+        if ps is None: ps = self.folded_momenta(kS)
+        p = ps[iq]
         ph = np.exp(2j*np.pi*(self.R@p))/np.sqrt(self.N)
         return ph[:,None]*U[iq][self.alpha,:]

@@ -32,9 +32,10 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
     rows = valid.ravel()
     # column order, the one of LAPACK, so that eigh can work on H in place
     H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128,order="F")
+    ps = basis.folded_momenta(kS) # once, for every block
     for g0,g1 in momentum_groups(basis,counts): # consecutive momenta q'
         H[:,offsets[g0]:offsets[g1]] = group_columns(basis,hk,kS,U,counts,
-                g0,g1)[rows]
+                g0,g1,ps=ps)[rows]
     # Hermitian up to rounding; in place, so that only one more matrix of
     # this size is alive (the conjugate transpose is built first)
     H += np.conjugate(H.T)
@@ -42,13 +43,14 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
     return H
 
 
-def group_columns(basis,hk,kS,U,counts,g0,g1):
+def group_columns(basis,hk,kS,U,counts,g0,g1,ps=None):
     """The columns of the ultracell matrix of the consecutive momenta q'
     from g0 to g1, at every row of the padded layout, (N*bmax,nb). Each
     temporary is dropped once it is used, and all of them on return, so
     that at most two arrays of the size of the group are alive at once
-    outside basis.from_supercell"""
-    B = np.hstack([basis.basis_block(kS,U[:,:,0:counts[iq]],iq)
+    outside basis.from_supercell. ps are the folded momenta of kS"""
+    if ps is None: ps = basis.folded_momenta(kS)
+    B = np.hstack([basis.basis_block(kS,U[:,:,0:counts[iq]],iq,ps=ps)
         for iq in range(g0,g1)]) # their basis vectors, (norbs,nb)
     Y = np.asarray(hk@B) # H_S applied to the basis vectors
     del B
