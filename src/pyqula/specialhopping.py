@@ -405,6 +405,15 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
     as before, with the range of its shells; rcut is for a function or a
     generator only.
 
+    The range follows g.get_hamiltonian. A function or a generator has a
+    hard cut at rcut, every pair farther than rcut is zero, and rcut=None
+    is 5.0 in a periodic system and every pair in a finite one. A
+    generator does not know its range, also when it is built from shells:
+    NNG(g,[0,0,0,0,0,J6]) on the chain of spacing 1 reaches its sixth shell
+    only with rcut=6 or more, and with the default it gives no coupling. A
+    list of shells reaches its last shell whatever its distance, and an
+    rcut given with a list raises.
+
     The pair of a site with itself, Jij(r_i,r_i), is dropped for a
     function and for a generator before the check (onsite=False of
     distance_cut_interaction). A coupling is between pairs of sites, and
@@ -429,8 +438,9 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
         return coo_matrix(sum(ms.values()))
     if rcut is not None:
         raise ValueError("rcut is the range of a coupling given as a "
-                "function Jij(r1,r2), and "+name+"="+repr(Jij)+" is not "
-                "one; a list of shell couplings has the range of its shells")
+                "function Jij(r1,r2) or a HoppingGenerator, and "+name+"="
+                +repr(Jij)+" is neither; a list of shell couplings has the "
+                "range of its shells")
     h = g.get_hamiltonian(has_spin=False,tij=Jij)
     return coo_matrix(h.get_hk_gen()([0.,0.,0.])) # the k=0 matrix
 
@@ -443,8 +453,9 @@ def generator_within(g,fm,rcut=None):
     m[i,j] the coupling of the pair (r_i, r_j + R_d), the same form as
     distance_cut_interaction gives for a function. Every cell d is built
     together with -d, so that the reciprocity of a pair can be checked.
+    The cut at rcut is hard, as g.get_hamiltonian does for a generator:
     rcut=None is every pair of a finite system and 5.0 for a periodic one,
-    as in distance_cut_interaction"""
+    as in distance_cut_interaction, whatever the range fm itself has"""
     r = np.array(g.r)
     if g.dimensionality==0 and rcut is None:
         return {(0,0,0): np.array(fm(r,r),dtype=np.complex128)}

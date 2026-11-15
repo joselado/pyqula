@@ -207,3 +207,22 @@ def test_the_pair_of_a_site_with_itself_is_dropped(model):
     _,e2 = build(model,g,Jij=soft,rcut=3.)
     assert abs(e1(x)-e2(x))<1e-12
     assert abs(e1(x))>0.1
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_a_generator_reaches_rcut_and_a_list_its_last_shell(model):
+    """The range of g.get_hamiltonian: a generator has a hard cut at rcut,
+    5.0 by default in a crystal, also when it is built from shells, while
+    a list reaches its last shell. On the chain of one site the sixth
+    shell is six cells away: NNG gives it only with an rcut beyond 6, and
+    then the same coupling as the list"""
+    from pyqula.specialhopping import NNG
+    g = geometry.chain()
+    x = [1.]
+    vs = [0.,0.,0.,0.,0.,0.7]
+    _,e_list = build(model,g,Jij=vs)
+    _,e_default = build(model,g,Jij=NNG(g,vs))
+    _,e_long = build(model,g,Jij=NNG(g,vs),rcut=6.5)
+    assert abs(abs(e_list(x))-1.4)<1e-10 # the two pairs at distance 6
+    assert abs(e_default(x))<1e-12 # beyond the default rcut=5
+    assert abs(e_long(x)-e_list(x))<1e-10
