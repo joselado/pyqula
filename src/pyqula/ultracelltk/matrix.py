@@ -51,6 +51,12 @@ def eigenstates(basis,hk,kS):
     return es,C.reshape(N,bmax,len(es)),U
 
 
+def eigenvalues(basis,hk,kS):
+    """Eigenvalues of the ultracell at kS, without the eigenvectors"""
+    E,U,valid = basis.states(kS)
+    return eigh(ultracell_matrix(basis,hk,kS,E,U,valid),eigvals_only=True)
+
+
 def real_space_states(basis,kS,C,U):
     """The eigenvectors on the orbitals of the supercell, (norbs,nstates),
     one FFT over the folded momenta per state"""

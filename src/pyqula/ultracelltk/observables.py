@@ -15,7 +15,7 @@ import numpy as np
 from .. import filewrite
 from ..dostk.eigtodos import calculate_dos
 from .basis import pad3
-from .matrix import eigenstates, real_space_states
+from .matrix import eigenstates, eigenvalues, real_space_states
 
 
 def check_nk(nk):
@@ -75,7 +75,7 @@ def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
         nks = np.zeros(d) + np.atleast_1d(check_nk(nk))[0:d] # per direction
         delta = 5./min(nks*u.basis.n[0:d]) # as dos_kmesh, on the folded mesh
     check_delta(delta)
-    es = np.concatenate([eigenstates(u.basis,u.hk(k),k)[0] for k in ks])
+    es = np.concatenate([eigenvalues(u.basis,u.hk(k),k) for k in ks])
     ys = calculate_dos(es,energies,delta)/(np.pi*len(ks)*u.basis.N)
     if write: write_dos(energies,ys)
     return (energies,ys)
