@@ -100,11 +100,13 @@ agreeing to tolerance), not a recorded number. `pyproject.toml` puts `src` on
 `pyqula` and holds a stray empty `__init__.py`, so the default import mode would resolve
 `import pyqula` to the repo root instead of `src/pyqula`.
 
-The suite collects **4084 tests** (`pytest tests --collect-only -q`). The slowest
+The suite collects **4128 tests** (`pytest tests --collect-only -q`). The slowest
 individual tests (SCF and RPA, jax Newton solvers, Keldysh transport) run 10 to 25 s
-each. The last whole-suite measurement on an idle machine was 37:34 at 1966 tests, so
-budget more than that now, with `tests/scf` alone about 15 min and `tests/keldysh` about
-12 min. A timing taken while other jobs run is meaningless. When tailing a running suite,
+each. The last whole-suite measurement on an idle machine was 37:34 at 1966 tests; at
+4126 tests with numba and BLAS held to two threads it took 74 min, with `tests/scf`
+alone about 13 min and `tests/keldysh` about 12 min. Under such a cap the four tests
+that compare thread counts fail with "The number of threads must be between 1 and 2",
+which is the cap and not the code. A timing taken while other jobs run is meaningless. When tailing a running suite,
 pytest writes its progress without a newline until a 72-character line fills, so
 `tail -c` on a redirected log shows the same stale chunk for minutes and a healthy run
 looks stalled.
