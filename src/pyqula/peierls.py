@@ -36,9 +36,11 @@ def add_peierls(h,mag_field=0.0,new=False):
   celldis = np.sqrt(a1.dot(a1))
   from numpy import array
   norb = h.intra.shape[0]  # number of orbitals
-  if h.is_multicell:
-    raise NotImplementedError("the Peierls phase is not implemented for "
-            "multicell Hamiltonians")
+  # a multicell Hamiltonian in 1d (a ribbon from a hopping function is
+  # stored this way) takes the phase of each cell along the ribbon
+  if h.is_multicell and (new or h.dimensionality>1):
+    raise NotImplementedError("the Peierls phase is implemented for "
+            "multicell Hamiltonians only in 1d, and not with new=True")
   if new:
     print("New method to calculate peierls")
     g = h.geometry # geometry
@@ -66,7 +68,7 @@ def add_peierls(h,mag_field=0.0,new=False):
         for k in range(len(m.data)): # loop over non vanishing elements
           i = m.row[k]
           j = m.col[k]
-          if h.has_spin: i,j = i/2,j/2 # raise if spinful
+          if h.has_spin: i,j = i//2,j//2 # the site of each spin entry
           p = peierls(x[i],y[i],x[j],y[j],mag_field) # peierls phase
           data[k] *= p # add phase
         h.intra = csc_matrix((data,(row,col)),shape=(norb,norb)) # convert to csc
@@ -110,10 +112,9 @@ def add_peierls(h,mag_field=0.0,new=False):
       gaugeize(h.intra,d=0.0)  # gaugeize intraterm
       if h.dimensionality==0: pass # if zero dimensional
       elif h.dimensionality==1: # if one dimensional
-        if h.is_multicell:
-          raise NotImplementedError("the Peierls phase is not implemented for "
-                  "multicell Hamiltonians")
-        gaugeize(h.inter,d=celldis) # gaugeize interterm
+        if h.is_multicell: # every cell along the ribbon
+          for t in h.hopping: gaugeize(t.m,d=t.dir[0]*celldis)
+        else: gaugeize(h.inter,d=celldis) # gaugeize interterm
       elif h.dimensionality==2: # if bigger dimensional
         print("WARNING, is your gauge periodic?")
         gaugeize(h.tx,d=h.geometry.a1[0]) # gaugeize interterm

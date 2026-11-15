@@ -904,9 +904,9 @@ class Hamiltonian():
     def add_hopping_matrix(self,fm,**kwargs):
         """
         Add a certain hopping matrix to the Hamiltonian. Any extra keyword
-        (in particular nc, the neighbor cutoff) is forwarded to the
-        geometry's Hamiltonian builder -- raise it above its default when
-        fm reaches beyond the cells that default cutoff covers.
+        is forwarded to the geometry's Hamiltonian builder: fm is evaluated
+        on every cell with a pair of sites within rcut=5.0, so pass a
+        larger rcut (or a box of cells, nc) when fm reaches farther.
         """
         if not self.is_multicell: 
             self.turn_multicell()

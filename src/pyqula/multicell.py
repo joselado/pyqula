@@ -313,8 +313,11 @@ from .current import derivative
 
 
 def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
-        spinful_generator=False):
-  """ Gets a first neighbor hamiltonian
+        spinful_generator=False,cells=None):
+  """The Hamiltonian of the hopping function fc(r1,r2), on the cells of
+  the box |n_k| <= cutoff, or on the list of cells (n1,n2,n3) if given,
+  skipping a cell with no pair of sites within rcut. The matrices are
+  sparse if h is.
 
   spinful_generator: fc returns the 2x2 spin block of each pair of sites
   instead of a number, and h must be spinful"""
@@ -326,9 +329,12 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
     if not h.has_spin:
       raise ValueError("a spinful hopping generator returns 2x2 spin "
               "blocks, so it needs a spinful Hamiltonian (has_spin=True)")
-    def build(r1,r2): return parametric_hopping_spinful(r1,r2,fc)
+    def build(r1,r2):
+        return parametric_hopping_spinful(r1,r2,fc,is_sparse=h.is_sparse)
   else:
-    def build(r1,r2): return h.spinless2full(parametric_hopping(r1,r2,fc))
+    def build(r1,r2):
+        return h.spinless2full(parametric_hopping(r1,r2,fc,
+            is_sparse=h.is_sparse))
   if fc is None:
     rcut = 2.1 # stop in this neighbor
     def fc(r1,r2):
@@ -343,7 +349,8 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
   a1, a2, a3 = g.a1, g.a2, g.a3
   h.intra = build(r,r) # intra matrix
   # generate directions
-  dirs = h.geometry.neighbor_directions(n=cutoff) # directions of the hoppings
+  if cells is None: dirs = h.geometry.neighbor_directions(n=cutoff)
+  else: dirs = [tuple(int(x) for x in d) for d in cells] # those given
   # generate hoppings
   h.hopping = [] # empty list
   for d in dirs: # loop over directions
@@ -366,8 +373,12 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
 
 
 
-def parametric_matrix(h,cutoff=2,fm=None):
-  """ Gets a first neighbor hamiltonian"""
+def parametric_matrix(h,cutoff=2,fm=None,cells=None,spinful_generator=False):
+  """The Hamiltonian of the matrix generator fm(rs1,rs2) on the cells of
+  the box |n_k| <= cutoff, or on the list of cells (n1,n2,n3) if given.
+
+  spinful_generator: fm returns the spinful matrix, with the 2x2 spin
+  block of each pair of sites, so it is not doubled"""
   from .neighbor import parametric_hopping
   if fm is None:
     raise ValueError("parametric_matrix needs a hopping function, pass it as "
@@ -377,9 +388,14 @@ def parametric_matrix(h,cutoff=2,fm=None):
   h.is_multicell = True
 # first neighbors hopping, all the matrices
   a1, a2, a3 = g.a1, g.a2, g.a3
-  h.intra = h.spinless2full(fm(r,r)) # intra matrix
+  if spinful_generator:
+    h.has_spin = True
+    def full(m): return m # already spinful
+  else: full = h.spinless2full
+  h.intra = full(fm(r,r)) # intra matrix
   # generate directions
-  dirs = h.geometry.neighbor_directions(n=cutoff) # directions of the hoppings
+  if cells is None: dirs = h.geometry.neighbor_directions(n=cutoff)
+  else: dirs = [tuple(int(x) for x in d) for d in cells] # those given
   # generate hoppings
   h.hopping = [] # empty list
   def gett(d):
@@ -388,7 +404,7 @@ def parametric_matrix(h,cutoff=2,fm=None):
         t = Hopping() # hopping class
         da = a1*i1+a2*i2+a3*i3 # direction
         r2 = [ri + da for ri in r]
-        t.m = h.spinless2full(fm(r,r2))
+        t.m = full(fm(r,r2))
         t.dir = [i1,i2,i3] # store direction
         if np.sum(np.abs(t.m))>0.00001: return t
         else: return None

@@ -739,8 +739,9 @@ already reached once.
   triangular lattice, where 4 of the 6 second-neighbor bonds are lost (the
   lowest band at a generic k is -0.667 instead of -1.146), and on the
   one-site chain, with the ranked list of builders a read-only audit found
-  and the three ways to repair it. Nothing changed; it is a decision on the
-  default storage of a core path, with a recommendation.
+  and the three ways to repair it. Repaired the same morning with the
+  option the maintainer picked: a function or a generator in 1D and 2D is
+  built as multicell, on every cell within 5.0.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

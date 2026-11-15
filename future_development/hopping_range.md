@@ -2,12 +2,45 @@
 
 A hopping given to `g.get_hamiltonian(tij=...)` as a function, or as a `HoppingGenerator`
 (`specialhopping.NNG`, `ILG` and the others), on a 1D or 2D lattice and with the default
-`is_multicell=False`, is stored in the single-cell form (`inter`, or `tx`, `ty`, `txy`,
-`txmy`), which visits only the 9 cells with $|n_1|,|n_2|\le1$. A hopping to a farther cell is
+`is_multicell=False`, was stored in the single-cell form (`inter`, or `tx`, `ty`, `txy`,
+`txmy`), which visits only the 9 cells with $|n_1|,|n_2|\le1$. A hopping to a farther cell was
 dropped without a warning. The same shells given as a list, `tij=[t1,t2,...]`, go through the
 multicell builder with a range set by the number of shells and are complete. This was found
-on 15 November 2026, by a read-only audit agent and then by a run, and nothing was changed: it
-is a change of the default storage of a core path, which the maintainer decides.
+on 15 November 2026, by a read-only audit agent and then by a run.
+
+Repaired the same morning, with the first option below, which the maintainer picked: a
+function or a generator in 1D and 2D is built as multicell. Both are evaluated on the cells of
+`specialhopping.cells_within(g,rcut)`, every cell with a pair of sites within `rcut=5.0`, unless
+a box of cells is asked for with `nc=` or `cutoff=` (the same thing, both at once is a
+TypeError); `nc` defaults to `None` now, it was 2. A large cell still builds its neighbor cells
+only. A Hermitian Hamiltonian is evaluated on one cell $R$ of each pair $R,-R$ (the first
+nonzero index positive) and the hopping to $-R$ is the adjoint, which is what the single-cell
+storage did. This matters for a function that is reciprocal but not periodic in the lattice:
+`specialhamiltonian.topological_heavy_fermion_1d` takes the sign of a hopping from the position
+of the bond, and a build of both directions gave it a Bloch Hamiltonian that is not Hermitian,
+with no warning. A non-Hermitian Hamiltonian (`non_hermitian=True`) evaluates both directions.
+On the way, a sparse build from a function makes sparse matrices (the multicell builder made
+dense ones), a generator with `spinful_generator=True` is no longer doubled in spin, and
+`h.add_peierls` takes a 1D multicell Hamiltonian, so a ribbon from a function still gets its
+field; its spinful sparse branch indexed the positions with a float and failed.
+
+Two callers read the single-cell attributes of a Hamiltonian built from a function:
+`spinwaves.hp_heisenberg` and `spinwaves.szsz` (`h.inter`, `h.tx`...). They now loop over the
+cells of the multicell storage. Other routines still refuse or cannot read a multicell
+Hamiltonian and now fail, loudly, on a 1D or 2D one from a function, as they already did on one
+from a list: `heterostructures.create_leads_and_central` (`heterostructures.build` converts
+first and works), `h.add_peierls` in 2D, and some legacy readers (`kdos.write_surface_kpm` in
+1D, `ldos.ldos_finite`, `multilayers.build_honeycomb_bilayer`).
+
+`tests/hopping/test_hopping_range.py` holds a function and `NNG` against the list of the same
+shells on the triangular lattice, the chain to the third neighbor, the square lattice to the
+third shell and the honeycomb lattice to the fourth (these fail on the code before), a large
+cell that reaches its neighbors only, `rcut=` and `cutoff=` on both paths, the hopping to $-R$
+equal to the adjoint, the heavy-fermion chain against its single-cell model, a spinful
+generator on a chain, and the Peierls phase of a ribbon from a function.
+`tests/magnon/test_holstein_primakoff.py` checks the ferromagnetic magnon dispersion
+$E(k)=\sum_d J(d)(1-\cos 2\pi k\cdot d)$ to the third shell on the chain and the square
+lattice. The tables below are the state before the repair.
 
 ## What was measured
 
