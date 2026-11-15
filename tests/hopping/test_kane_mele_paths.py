@@ -12,7 +12,8 @@ and the kagome lattices, as before, and zero on the triangular lattice.
 
 The reference below builds the coupling by hand from that definition,
 looking for the intermediate sites in a large box of cells, and counts
-the paths with a nonzero orientation.
+the paths of every bond: one on the honeycomb and the kagome lattices, so
+the average is the path the code found before.
 """
 
 import numpy as np
@@ -34,8 +35,8 @@ def reference(g, t, k, spinful, ncell=3):
     """The Kane-Mele (spinful) or Haldane (spinless) coupling at the
     momentum k, i t (d1 x d2) averaged over the paths, between every site
     of the cell 0 and every site of the cell R closer than sqrt(4.1).
-    Returns the matrix and the largest number of paths of one bond with a
-    nonzero orientation"""
+    Returns the matrix and the largest number of paths of one bond, the
+    pair of a site with itself left out"""
     r = np.array(g.r)
     n = len(r)
     cells = [(i, j) for i in range(-ncell, ncell+1)
@@ -57,7 +58,8 @@ def reference(g, t, k, spinful, ncell=3):
                      (np.abs(np.sum(d2*d2, axis=1) - 1.) < 1e-5)
                 if not np.any(on): continue
                 cr = np.cross(d1[on], d2[on])
-                most = max(most, int(np.sum(np.linalg.norm(cr, axis=1) > 1e-8)))
+                if dr@dr > 1e-8: # every path of a bond, not of a site
+                    most = max(most, int(np.sum(on)))
                 v = np.mean(cr, axis=0)
                 if spinful:
                     sv = sum(v[a]*_s[a] for a in range(3))
