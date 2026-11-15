@@ -634,10 +634,33 @@ def bastin(st,mu,fermis,T=0.,ne=None):
     return out
 
 
+def _resolvent_batches(n,nc,nz,memory,nb=32):
+    """Number of Chebyshev vectors stored in one block of moments, and of
+    energies run in one batch, by _imaginary_resolvent within the memory
+    budget (GB), as (nb, nzb).
+
+    In units of one set of vectors, 16 n nc bytes, the routine holds at
+    once: the block of nb moments; for the batch of nzb energies, the sum
+    Y, the product of a block that is added to it, and the previous batch,
+    which the caller still holds while the next one is built (3 nzb); the
+    three vectors of the recursion; and one more for the work arrays of
+    the caller. So 3 nzb + nb + 4 sets must fit in the budget. A budget
+    with room to spare keeps nb and runs every energy in one batch, as
+    before. A small one gives at most a quarter to the block and the rest
+    to the energies, since every batch runs the whole recursion again and
+    the size of a block only sets how many moments one matrix product
+    takes. Below 8 sets the routine cannot fit, and it runs one energy and
+    one moment at a time"""
+    slots = int(np.floor(memory*1e9/(16.*n*nc))) # sets in the budget
+    nb = int(max(1,min(nb,(slots-4)//4)))
+    nzb = int(max(1,min(nz,(slots-4-nb)//3)))
+    return nb,nzb
+
+
 def _imaginary_resolvent(H,D,zs,a,b,memory,nb=32):
     """Generator of (j0, Y), with Y[j] = Im G(zs[j0+j]) D, of shape
     (nz,n,ncol), for G(z) = (z - H)^-1 and the energies in batches that fit
-    in the memory budget (GB).
+    in the memory budget (GB), see _resolvent_batches.
 
     With G(z) = (1/a) sum_n (2-delta_n0) q^n/r T_n(H~) (the series and its
     truncation are those of bsetk/chebyshev.py) and T_n(H~) a Hermitian
@@ -648,7 +671,7 @@ def _imaginary_resolvent(H,D,zs,a,b,memory,nb=32):
     from ..bsetk.chebyshev import _coefficients,_series,number_of_moments
     n,nc = D.shape
     N = number_of_moments(zs,b,a)
-    nzb = int(max(1,min(len(zs),np.floor(memory*1e9/(16.*n*nc)))))
+    nb,nzb = _resolvent_batches(n,nc,len(zs),memory,nb=nb)
     buf = np.empty((nb,n*nc),dtype=np.complex128)
     for j0 in range(0,len(zs),nzb):
         z = zs[j0:j0+nzb]

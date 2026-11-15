@@ -292,3 +292,73 @@ def test_unsupported_options_raise():
         h.get_dc_conductivity(mode="singleshot",T=0.1)
     with pytest.raises(ValueError,match="npol"):
         h.get_dc_conductivity(mode="singleshot",npol=100)
+
+
+def test_resolvent_batches_fit_the_memory_budget():
+    """The single-shot resolvent holds a block of nb moments, three sets
+    per energy of a batch (the sum, the product added to it and the batch
+    the caller still holds) and four more sets, each set 16 n nc bytes.
+    With 10^6 orbitals, nc = 3 and the default 2 GB, the block of 32
+    vectors alone used to take 1.5 GB on top of the budget; now the total
+    fits, and with room to spare the block and the batch are as before"""
+    n, nc, memory = 10**6, 3, 2.
+    unit = 16.*n*nc
+    for nz in [1, 5, 100]:
+        nb, nzb = kpmkubo._resolvent_batches(n, nc, nz, memory)
+        assert nb >= 1 and 1 <= nzb <= nz
+        assert (3*nzb + nb + 4)*unit <= memory*1e9
+    assert kpmkubo._resolvent_batches(100, 3, 40, 2.) == (32, 40)
+
+
+def test_resolvent_stays_within_its_memory_budget():
+    """The peak of the arrays the single-shot resolvent allocates, traced
+    by tracemalloc, stays inside the memory= budget, and a small budget,
+    which runs the energies in several batches and the moments in small
+    blocks, gives the same Im G D as an ample one. A budget of 30 sets of
+    vectors used to hold the 32 stored vectors, the 30 energies and the
+    product added to them, about three times the budget"""
+    import tracemalloc
+    import scipy.sparse as sp
+    n = 8000
+    H = kpmkubo._CSR(sp.diags([np.ones(n-1), np.ones(n-1)], [-1, 1],
+            format="csr"))
+    rng = np.random.default_rng(1)
+    D = np.ascontiguousarray(rng.random((n, 3)) + 1j*rng.random((n, 3)))
+    d0 = D[:, 0].copy()
+    zs = np.linspace(-1., 1., 30) + 0.2j
+    memory = 30*16.*n*3/1e9 # 30 sets of vectors
+
+    def run(memory):
+        out = np.zeros(len(zs), dtype=np.complex128)
+        for j0, Y in kpmkubo._imaginary_resolvent(H, D, zs, 2.1, 0., memory):
+            for j in range(len(Y)):
+                out[j0+j] = np.vdot(d0, Y[j][:, 0])
+        return out
+    ref = run(10.) # every energy in one batch, and the kernels compiled
+    tracemalloc.start()
+    try:
+        tracemalloc.reset_peak()
+        out = run(memory)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 1.5*memory*1e9, (peak, memory*1e9)
+    assert np.max(np.abs(out-ref)) < 1e-10*np.max(np.abs(ref))
+
+
+def test_singleshot_does_not_depend_on_the_memory_budget():
+    """A budget too small for one batch of all the Fermi levels runs them
+    in several batches, with the same single-shot conductivity"""
+    g = geometry.chain().get_supercell(60)
+    h = g.get_hamiltonian(has_spin=False, is_sparse=True)
+    fermis = np.linspace(-1.5, 1.5, 7)
+    kw = dict(fermi=fermis, delta=0.3, mode="singleshot", component="xx",
+            trace="exact")
+    s0 = h.get_dc_conductivity(**kw)
+    # the exact trace runs the 60 basis vectors as one block, so the
+    # recursion carries v X and X, 120 columns: 20 sets of 60 x 120
+    # vectors give blocks of 4 moments and batches of 4 Fermi levels
+    memory = 20.5*16.*60*120/1e9 # 20 whole sets, away from a rounding
+    assert kpmkubo._resolvent_batches(60, 120, len(fermis), memory) == (4, 4)
+    s1 = h.get_dc_conductivity(memory=memory, **kw)
+    assert np.max(np.abs(s1-s0)) < 1e-10*np.max(np.abs(s0))
