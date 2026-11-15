@@ -301,7 +301,9 @@ ws = np.linspace(0.,4.,100) # frequencies
 ```
 
 `s` is the same complex array of shape `(nw,3,3)` as in the band modes,
-here at the Gamma point of the supercell.
+here at the Gamma point of the supercell. The Fermi function is taken at the
+temperature `T`, which is `delta` by default, and any `T` works, also one
+much smaller than `delta`.
 
 ![Real and imaginary part of the optical conductivity of a disordered gapped honeycomb supercell of 1800 sites against frequency, from the Chebyshev expansion.](img/optical_kpm.png#only-light)
 ![Real and imaginary part of the optical conductivity of a disordered gapped honeycomb supercell of 1800 sites against frequency, from the Chebyshev expansion.](img/optical_kpm-dark.png#only-dark)

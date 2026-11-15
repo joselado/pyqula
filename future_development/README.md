@@ -442,7 +442,8 @@ already reached once.
   (a Kramers-Kronig transform, with the Hall plateau at w -> 0 as a second
   route) and the single-shot Kubo-Greenwood sigma_xx. Open: the GPU, the
   SHG, and a wrong Kubo-Bastin sigma_xx with the Lorentz kernel (measured,
-  not repaired).
+  not repaired). Since 15 November 2026 also any temperature, below the
+  spacing of the energy nodes included.
 
 - [`chebyshev_methods.md`](chebyshev_methods.md) -- the Chebyshev methods
   of seven papers, each read from its TeX source (the Kubo-Bastin moments,
@@ -737,9 +738,13 @@ already reached once.
   `VJinteraction`, with the exchange `J1` to `Jr` and no dense supercell in
   the loop, one diagonalization per kpoint and iteration (a 2304-orbital
   call from 30 s to 15 s), and a spinless one on the sparse loop of
-  `densitydensity_kpm`. Open: two decisions with a recommendation, Nambu
-  with a cut (left until `window=`) and the zero net moment of the paper
-  (a named constraint), and stages 3 and 4.
+  `densitydensity_kpm`. The same day the maintainer's picks were built:
+  `window=(emin,emax)` with frozen states, a Nambu mean field with the cut
+  |E| <= emax, and the named constraint `no_net_moment`; then a
+  Hellmann-Feynman test, the shell fill of a gapless paired state, and two
+  examples with a table in `emax`. Open: the four cuts at which the shell
+  does not hold the charge and two cycles of the shell, a cut that
+  exaggerates the modulation of a pairing, and stages 3 and 4.
 
 - [`hopping_range.md`](hopping_range.md) -- a hopping given to
   `g.get_hamiltonian(tij=...)` as a function or a `HoppingGenerator`, in 1D

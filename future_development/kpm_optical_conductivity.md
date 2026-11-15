@@ -370,3 +370,47 @@ e = -1 + 1e-6. The Lorentz kernel leaves Lorentzian tails all the way to e = -1,
 factor is 1e12, while the Gaussian tails of Jackson vanish there. The existing Hall test uses
 Jackson, so nothing caught it. Not repaired: the options are a guard that refuses the Lorentz
 kernel in the Bastin route, or an integration that handles the end point.
+
+## The finite temperature below the node spacing (built 15 November 2026)
+
+At T > 0 `absorptive()` sampled r = [f(E)-f(E+w)]/w on the ne nodes, with weights r_j pi/ne.
+That is the midpoint rule, and its error falls as exp(-1.5 pi^2 T/spacing). On the 18-orbital
+metallic cell (nk=2, npol=60, exact moments, spacing 0.0195) it was 7% at T = spacing/3, 0.2%
+at spacing/2 and 3e-7 at one spacing. At spacing/5, ne = 4M and 6M differed by 30%.
+
+The thermal factor is the T=0 box averaged over the Fermi level with p = -df/dx. So the weights
+of `_box_weights` carry over with the same window at fermi and fermi-w, using the exact cosine
+moments R_k of r (682b228). For k >= 1 an integration by parts leaves a bump of width T at each
+edge. It is summed on a grid of step pi/N, N = (ne + 45/d)/2, only within 44 T of an edge, and
+a chirp z-transform gives all k. R_0 is the box plus the excess of f over the step, by
+Gauss-Legendre panels. The cost does not grow with T or 1/T. The two forms first proposed,
+averaging the weights over the Fermi level and a fine DCT of r, need about 140 + 36 T/spacing
+DCTs and ne(0.5 + 1.8 spacing/T) points; these are node counts, not timings. Each would need a
+switch in T.
+
+Measured: moments to 6e-12 against brute force for T from 1e-3 to 20 spacings. The absorptive
+part matches an energy integral to 2e-14 for T from 0.1 to 3 spacings. It does not depend on ne
+to 4e-14 at spacing/5. T = 1e-9 spacings gives the T=0 box to 6e-13. At T = delta the old
+values hold to 1e-13, for 0.5 to 1.1 ms more per frequency (8 to 21% at npol 32 to 125, below
+5% at 500). The maintainer chose on 15 November 2026 to keep this one formula at every T rather
+than skip the exact weights above about 4 spacings, which would have saved that time with a
+switch in T.
+
+A reviewer found no error at physical parameters, and two gaps that were then closed (7895ca9).
+The bump grows as 1/(T max(|w|,T)) and overflowed near the smallest float, so T=1e-300 with
+w=1e-6 gave NaN weights that reached the conductivity; it is now multiplied by the step of its
+grid before the sums. No test reached the grid that starts at theta=0, where a flipped sign was
+a 100% error that every test passed; a test with a tail at either end of the rescaled spectrum
+now catches it, and an unshifted second edge too. Where the old and new values differ by more
+than 1e-13 (a Fermi level near the top of the band at |w| of 1 to 2, |w| below 1e-5, npol=20),
+the old code was the inaccurate one against a long-double midpoint rule.
+
+Open:
+- The moments lose digits when max(|w|,T) is small: about a/max(|w|,T) times 1e-17 to 3e-16
+  relative, so 1e-12 holds only for |w| and T above about 1e-4, and sigma jumps by 3e-8
+  relative at the switch |w| <= 1e-10 to the limit w = 0. The aliasing budget exp(-45) is set
+  against the height of the bump, and 55 would gain two digits at T=1e-9; the rest is rounding
+  in the sum over the bump and the difference (G0-G1)/w of R_0. Still better than the old code
+  there.
+- `bastin()` and `sum_rule_weight()` sample f on their own nodes, and were not checked below
+  their node spacing.
