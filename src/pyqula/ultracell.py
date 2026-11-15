@@ -47,8 +47,10 @@ class Ultracell():
         self.hs.turn_sparse() # it is only applied to vectors
         if hasattr(self.hs,"ultracell_basis"): del self.hs.ultracell_basis
         self.basis = basistk.FoldedBasis(self.h,self.hs,emax=emax)
-        self.basis.rebuild = bool(rebuild_basis)
-        self.rebuild_basis = self.basis.rebuild
+        self.rebuild_basis = bool(rebuild_basis)
+        if self.rebuild_basis: # the states of the periodic part of hs
+            self.basis = self.basis.rebuilt(self.hs)
+        self.basis.rebuild = self.rebuild_basis
         self.emax = self.basis.emax
         self._hk = self.hs.get_hk_gen()
     def hk(self,kS):
@@ -60,7 +62,7 @@ class Ultracell():
         supercell Hamiltonian in the kept folded Bloch states"""
         def f(kS):
             hk = self.hk(kS)
-            E,U,valid = self.basis.states(kS,hk)
+            E,U,valid = self.basis.states(kS)
             return matrixtk.ultracell_matrix(self.basis,hk,kS,E,U,valid)
         return f
     def get_kdos_bands(self,**kwargs):

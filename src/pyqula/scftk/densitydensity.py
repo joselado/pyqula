@@ -908,8 +908,10 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             return simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T,
                     keep_mesh=True)
         elif integration=="ultracell":
+            # which keeps its states for the density matrix of h shifted
+            # by this level, see ultracelltk.meanfield
             from ..ultracelltk.meanfield import get_fermi4filling
-            return get_fermi4filling(h,filling,nk=h.nk,T=T)
+            return get_fermi4filling(h,filling,nk=h.nk,T=T,keep=True)
         else: return h.get_fermi4filling(filling,nk=h.nk,T=T)
     # a Bogoliubov-de Gennes h at a filling: the Fermi level is found on
     # the charge of the paired state, as an offset from the one of the
@@ -983,8 +985,9 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         from ..dmtk import simplexdm
         etot = simplexdm.band_energy(h,nk=h.nk)
     elif integration=="ultracell": # from the ultracell eigenvalues
-        from ..ultracelltk.meanfield import band_energy
-        etot = band_energy(h,nk=h.nk)
+        from ..ultracelltk.meanfield import band_energy, release_states
+        etot = band_energy(h,nk=h.nk) # with the states of scf.dm
+        release_states(h) # the returned Hamiltonian does not carry them
     else:
         etot = h.get_total_energy(nk=h.nk)
     if fermi_level is not None:

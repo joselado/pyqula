@@ -27,7 +27,7 @@ its direct form, with the unit-cell states at every folded momentum.
 """
 
 import numpy as np
-from scipy.linalg import eigh
+from copy import copy
 
 from .. import algebra
 
@@ -76,6 +76,37 @@ def complete_level(e,nkeep,tol=1e-7):
     while 0<nkeep<len(e) and abs(e[nkeep]-e[nkeep-1])<tol*max(1.,abs(e[nkeep])):
         nkeep += 1 # the next level is degenerate with the last one kept
     return nkeep
+
+
+class HoppingSum():
+    """The Bloch Hamiltonian sum_d t_d exp(2 pi i p.d) of a set of hoppings
+    {d: (norb,norb)} of a unit cell, evaluated at many momenta at once.
+    Only the first dim components of d and p enter, as in
+    geometrytk.bloch.bloch_phase"""
+    def __init__(self,hop,norb,dim=3):
+        keys = list(hop)
+        self.ds = np.array([pad3(d) for d in keys]).reshape(len(keys),3)
+        self.ds[:,dim:] = 0.
+        self.ms = np.array([dense(hop[d]) for d in keys],
+                dtype=np.complex128).reshape(len(keys),norb,norb)
+    def __call__(self,ps):
+        """The Hermitian matrices at the momenta ps, (np,norb,norb)"""
+        ph = np.exp(2j*np.pi*(np.asarray(ps,dtype=float)@self.ds.T))
+        H = np.einsum("pd,dab->pab",ph,self.ms)
+        return 0.5*(H + np.conjugate(np.swapaxes(H,1,2)))
+
+
+def eigh_momenta(hsum,ps,chunk=2**22):
+    """Eigenvalues (np,norb) and eigenvectors (np,norb,norb) of hsum at the
+    momenta ps, diagonalized in batches of at most chunk matrix entries"""
+    ps = np.asarray(ps)
+    norb = hsum.ms.shape[1]
+    nb = max(1,chunk//(norb*norb)) # momenta per batch
+    es,ws = [],[]
+    for i in range(0,len(ps),nb):
+        e,w = np.linalg.eigh(hsum(ps[i:i+nb]))
+        es.append(e) ; ws.append(w)
+    return np.concatenate(es),np.concatenate(ws)
 
 
 class FoldedBasis():
@@ -134,7 +165,8 @@ class FoldedBasis():
         self.nsites = nat0
         self.q = np.stack(np.meshgrid(*[np.arange(m) for m in self.n],
             indexing="ij"),axis=-1).reshape(-1,3) # folded momenta, C order
-        self.hk0 = h.get_hk_gen() # Bloch Hamiltonian of the unit cell
+        self.hop0 = HoppingSum(h.get_multihopping().get_dict(),self.norb,
+                dim=self.dimensionality) # Bloch Hamiltonian of the unit cell
         if emax is not None:
             try: emax = float(emax)
             except (TypeError,ValueError):
@@ -142,40 +174,76 @@ class FoldedBasis():
                         +repr(emax))
         self.emax = emax
         self.rebuild = False # the clean states, see states()
+        self.hopp = None # the lattice-periodic part, see rebuilt()
+        self._counts = {} # states kept by the clean cut, per kS
     def folded_momenta(self,kS):
         """The N momenta p_q = (k_S+q)/n, in reduced coordinates of the
         unit cell, one row per q"""
         return (pad3(kS)[None,:] + self.q)/self.n[None,:]
-    def states(self,kS,hk=None):
+    def rebuilt(self,hs):
+        """A copy of this basis whose states are those of the
+        lattice-periodic part of the supercell hs, its hoppings averaged
+        over the cells. The block of each folded momentum on itself, in
+        the orbital Bloch basis, is the Bloch Hamiltonian of that part at
+        p_q, the same for every kS, so it is built once per hs. Without a
+        cut both bases span every orbital, and the copy keeps the clean
+        states"""
+        b = copy(self)
+        if self.emax is not None:
+            b.hopp = HoppingSum(self.periodic_hoppings(hs),self.norb,
+                    dim=self.dimensionality)
+        return b
+    def periodic_hoppings(self,hs):
+        """The hoppings of the supercell hs averaged over its N cells, as
+        the hoppings of a unit cell, {d: (norb,norb)}. An element of hs
+        between orbital i of cell R_i and orbital j of cell R_j + n D of
+        the supercell D is a hopping of the unit cell in the direction
+        d = R_j + n D - R_i, between their unit-cell orbitals, divided by
+        N. It is the lattice-periodic part of hs: a uniform moment, a
+        uniform shift, the average of a modulated hopping"""
+        from scipy.sparse import coo_matrix
+        out = {}
+        for D,m in hs.get_multihopping().get_dict().items():
+            m = coo_matrix(m)
+            if m.nnz==0: continue
+            i,j,val = m.row,m.col,m.data
+            d = self.R[j] - self.R[i] + self.n[None,:]*pad3(D)[None,:]
+            d = np.round(d).astype(int)
+            keys,inv = np.unique(d,axis=0,return_inverse=True)
+            inv = np.ravel(inv)
+            for ik,key in enumerate(keys):
+                s = inv==ik
+                t = coo_matrix((val[s]/self.N,(self.alpha[i[s]],
+                    self.alpha[j[s]])),shape=(self.norb,self.norb))
+                key = tuple(key)
+                out[key] = out.get(key,0.) + t.toarray()
+        return out
+    def states(self,kS):
         """The states kept at every folded momentum, padded to the largest
         number kept: energies (N,bmax), vectors (N,norb,bmax), and the mask
         (N,bmax) of the ones that exist. They are the states of the clean
-        unit cell, or, with self.rebuild, a cut, and the supercell Bloch
-        Hamiltonian hk at kS, the states of its lattice-periodic part.
-        Without a cut both span every orbital, and the clean states are
-        returned"""
-        if self.rebuild and hk is not None and self.emax is not None:
-            return self.rebuilt_states(kS,hk)
+        unit cell, or, for a basis made by rebuilt() with a cut, those of
+        the lattice-periodic part of the supercell"""
+        if self.hopp is not None: return self.rebuilt_states(kS)
         return self.clean_states(kS)
-    def rebuilt_states(self,kS,hk):
-        """The states of the lattice-periodic part of hk, the block of each
-        folded momentum on itself in the orbital Bloch basis, as many per
-        momentum as the cut keeps in the clean unit cell, completed so that
-        a degenerate level is kept whole. A lattice-periodic part of the
+    def counts(self,kS):
+        """Number of states the clean cut keeps at every folded momentum"""
+        key = tuple(np.round(pad3(kS),12))
+        if key not in self._counts:
+            self._counts[key] = np.sum(self.clean_states(kS)[2],axis=1)
+        return self._counts[key]
+    def rebuilt_states(self,kS):
+        """The states of the lattice-periodic part, as many per momentum as
+        the cut keeps in the clean unit cell, completed so that a
+        degenerate level is kept whole. A lattice-periodic part of the
         modulation or of a mean field (a uniform moment, a uniform shift)
         is then in the basis, and does not have to be built from the states
         the cut leaves out"""
-        E0,U0,valid0 = self.clean_states(kS)
-        counts = np.sum(valid0,axis=1)
-        I = [np.identity(self.norb,dtype=np.complex128)]*self.N # every orbital
-        es,ws = [],[]
-        for iq in range(self.N):
-            B = self.basis_block(kS,I,iq) # orbital Bloch sums of this q
-            heff = np.conjugate(B.T)@np.asarray(hk@B) # block of q on itself
-            e,w = eigh(0.5*(heff+np.conjugate(heff.T)))
-            c = complete_level(e,int(counts[iq]))
-            es.append(e[0:c]) ; ws.append(w[:,0:c])
-        return self.pad(es,ws)
+        e,w = eigh_momenta(self.hopp,self.folded_momenta(kS))
+        counts = self.counts(kS)
+        cs = [complete_level(e[iq],int(counts[iq])) for iq in range(self.N)]
+        return self.pad([e[iq,0:c] for iq,c in enumerate(cs)],
+                [w[iq,:,0:c] for iq,c in enumerate(cs)])
     def pad(self,es,ws):
         """Pad the states of every folded momentum to the largest number"""
         bmax = max([len(e) for e in es])
@@ -192,12 +260,10 @@ class FoldedBasis():
     def clean_states(self,kS):
         """The states of the clean unit cell up to emax at every folded
         momentum, padded as in states()"""
-        es,ws = [],[]
-        for p in self.folded_momenta(kS):
-            e,w = eigh(dense(self.hk0(p)))
-            idx = cut_window(e,self.emax)
-            es.append(e[idx]) ; ws.append(w[:,idx])
-        return self.pad(es,ws)
+        e,w = eigh_momenta(self.hop0,self.folded_momenta(kS))
+        idx = [cut_window(e[iq],self.emax) for iq in range(self.N)]
+        return self.pad([e[iq,i] for iq,i in enumerate(idx)],
+                [w[iq][:,i] for iq,i in enumerate(idx)])
     def phase(self,kS):
         """exp(2 pi i (k_S/n).R) on every orbital of the supercell"""
         return np.exp(2j*np.pi*(self.R@(pad3(kS)/self.n)))
