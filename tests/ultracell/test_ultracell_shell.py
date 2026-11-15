@@ -19,7 +19,7 @@ import pytest
 
 from pyqula import geometry, hamiltonians
 from pyqula.scftk import superscf
-from pyqula.scftk.densitydensity import get_dm
+from pyqula.scftk.densitydensity import get_dm, Vinteraction
 from pyqula.ultracell import Ultracell
 from pyqula.ultracelltk.basis import FoldedBasis, dense
 from pyqula.ultracelltk.meanfield import SparseBackend
@@ -38,13 +38,16 @@ def charge(filling):
     return filling*2*N
 
 
-def zeeman_chain(field=0.6,v=0.2):
+def zeeman_chain(field=0.6,v=0.2,direction=(0.,0.,1.)):
     """A spinful chain under a Zeeman field, with the Nambu degree of
     freedom, and its supercell of N cells under a potential periodic on
     it. The field kills the s-wave state of U=-1, so the mean field is a
-    normal state written as a BdG Hamiltonian"""
+    normal state written as a BdG Hamiltonian. Without spin-orbit coupling
+    the spectrum does not depend on the direction of the field, while the
+    density matrix is complex for a field off the z axis"""
     h = geometry.chain().get_hamiltonian(has_spin=True)
-    h.add_zeeman([0.,0.,field])
+    direction = np.array(direction)/np.linalg.norm(direction)
+    h.add_zeeman(field*direction)
     h.setup_nambu_spinor()
     hs = h.get_supercell(N)
     hs.add_onsite(lambda r: v*np.cos(2*np.pi*r[0]/N+0.3))
@@ -81,13 +84,18 @@ def same_state(u2,h3,k=(0.37,0.,0.)):
 
 
 @pytest.mark.parametrize("T",[1e-7,2e-2])
-def test_gapless_state_with_every_state_kept_is_the_supercell(scfs,T):
+def test_gapless_state_with_every_state_kept_is_the_supercell(scfs,T,
+        tmp_path,monkeypatch):
     """With every state kept, the charge, the energy and the Fermi level
     are those of "ed" on the supercell with its shell. Before, the
     ultracell ended 0.13 electrons per supercell off, 3e-5 in the energy
     and 4.4e-4 in the Fermi level at T=1e-7. At T=2e-2 the shell holds
     levels of several energies and the fill changes the band energy by
-    5e-4, which the total energy has to carry"""
+    5e-4, which the total energy has to carry. The spinful "ed" of the
+    supercell runs the same loop as the ultracell, which adds the change
+    of the band energy in one line for both, so the energy and the Fermi
+    level are also compared with the loop of densitydensity, which adds it
+    in a line of its own"""
     h,hs = zeeman_chain()
     kw = dict(U=-1.,mf="swave",filling=FILLING,nk=NK,T=T,maxerror=1e-11,
             verbose=0,write=False)
@@ -108,6 +116,11 @@ def test_gapless_state_with_every_state_kept_is_the_supercell(scfs,T):
     assert abs(s2.shell.mu-s3.shell.mu)<1e-6*T
     assert abs(s2.shell.correction-s3.shell.correction)<1e-9
     if T>1e-3: assert abs(s2.shell.correction)>1e-4
+    monkeypatch.chdir(tmp_path) # the density loop may write its MF.pkl
+    s4 = Vinteraction(hs.copy(),load_mf=False,**kw)
+    assert s4.shell.fired
+    assert abs(e2-s4.total_energy)<1e-9
+    assert abs(u2.hs.fermi-s4.hamiltonian.fermi)<1e-9
 
 
 @pytest.mark.parametrize("T",[1e-7,1e-3])
@@ -160,8 +173,9 @@ def test_the_fill_at_the_entries_is_the_dense_fill(T):
     the same shift of the chemical potential and the same change of the
     band energy. At T=2e-2 the shell holds levels of several energies, so
     the change of the energy is not zero, and away from d=0 the fill
-    carries the Bloch phases"""
-    h,hs = zeeman_chain()
+    carries the Bloch phases. The field points in a generic direction, so
+    the fill is complex and a conjugated fill does not pass"""
+    h,hs = zeeman_chain(direction=(0.3,0.5,0.8))
     def level(hh):
         fl = superscf.BdGFermiLevel(hh,FILLING,
                 lambda x,f: x.get_fermi4filling(f,nk=NK,T=T))
@@ -183,7 +197,9 @@ def test_the_fill_at_the_entries_is_the_dense_fill(T):
     assert abs(superscf.get_charge_bdg(dm2)-charge(FILLING))<1e-12
     for d in ds:
         assert np.max(np.abs(dm2[d].toarray()-dm3[d]))<1e-11
-        assert np.max(np.abs((dm2[d]-dm0[d]).toarray()))>1e-3 # it fills
+        fill = (dm2[d]-dm0[d]).toarray()
+        assert np.max(np.abs(fill))>1e-3 # it fills
+        assert np.max(np.abs(fill.imag))>1e-4 # and the fill is complex
     assert abs(f2.shell.mu-f3.shell.mu)<1e-8*T
     assert abs(f2.shell.correction-f3.shell.correction)<1e-12
     assert abs(f2.shell.fraction-f3.shell.fraction)<1e-10
