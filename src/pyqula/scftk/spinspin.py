@@ -80,17 +80,9 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None, rcut=None):
         # halved as J1/J2/J3 are, see densitydensity.add_pair_interaction
         from .densitydensity import add_pair_interaction
         add_pair_interaction(v, h.geometry, Jr, rcut=rcut, name="Jr")
-    for d in v:
-        m = v[d]
-        n = m.shape[0]
-        m1 = np.zeros((2*n, 2*n), dtype=np.complex128)
-        for i in range(n):
-            for j in range(n):
-                m1[2*i, 2*j] = m[i, j]/4.       # up-up
-                m1[2*i, 2*j+1] = -m[i, j]/4.    # up-down
-                m1[2*i+1, 2*j] = -m[i, j]/4.    # down-up
-                m1[2*i+1, 2*j+1] = m[i, j]/4.   # down-down
-        v[d] = m1
+    from .sparsemeanfield import SZSZ # [[1,-1],[-1,1]]/4 on the spins
+    for d in v: # up-up, up-down, down-up, down-down of every pair of sites
+        v[d] = np.kron(np.asarray(v[d], dtype=np.complex128), SZSZ)
     return v
 
 
@@ -353,17 +345,10 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None,
         from .densitydensity import add_pair_interaction
         add_pair_interaction(v, h.geometry, Vr, rcut=rcut)
     U = obj2geometryarray(U, h.geometry)
+    from .sparsemeanfield import DENSITY # the same on every pair of spins
     for d in v:
-        m = v[d]
-        n = m.shape[0]
-        m1 = np.zeros((2*n, 2*n), dtype=np.complex128)
-        for i in range(n):
-            for j in range(n):
-                m1[2*i, 2*j] = m[i, j]
-                m1[2*i+1, 2*j] = m[i, j]
-                m1[2*i, 2*j+1] = m[i, j]
-                m1[2*i+1, 2*j+1] = m[i, j]
-        v[d] = m1
+        v[d] = np.kron(np.asarray(v[d], dtype=np.complex128), DENSITY)
+    n = len(h.geometry.r)
     for i in range(n):
         v[(0, 0, 0)][2*i, 2*i+1] += U[i]/2.
         v[(0, 0, 0)][2*i+1, 2*i] += U[i]/2.
