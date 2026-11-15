@@ -183,15 +183,26 @@ def km_vector(ri,rj,rm,tol=1e-5):
 
 @jit(nopython=True,cache=True)
 def km_vector_jit(ri,rj,v,rm,tol=1e-5):
+    """The Kane-Mele vector of the bond ri -> rj: the orientation
+    (rm-ri) x (rj-rm) of the path through a site rm at the first-neighbor
+    distance 1 of both, averaged over every such site of rm. The honeycomb
+    and the kagome lattices have one path per second neighbor. The
+    triangular lattice has two with opposite orientations, which cancel:
+    taking the first one found, as this did, gave a sign that followed the
+    order of the candidates, and so could change with the cell"""
+    v = np.zeros(3)
+    n = 0 # number of paths
     for k in range(rm.shape[0]): # look for an intermediate site
       dr1 = rm[k]-ri # difference
       dr2 = rj-rm[k] # difference
       dr1m = np.sum(dr1*dr1)
       dr2m = np.sum(dr2*dr2)
       if abs(dr1m-1.)<tol and abs(dr2m-1.)<tol: # if connected
-         v = np.cross(dr1,dr2) # Kane Mele vector
-         return v
-    v = np.array([0.,0.,0.])
+         v = v + np.cross(dr1,dr2) # Kane Mele vector of this path
+         n += 1
+    if n>0: v = v/n # average over the paths
+    for c in range(3): # paths that cancel leave only the rounding
+      if abs(v[c])<1e-10: v[c] = 0.0
     return v
 
 
