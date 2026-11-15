@@ -226,3 +226,20 @@ def test_a_generator_reaches_rcut_and_a_list_its_last_shell(model):
     assert abs(abs(e_list(x))-1.4)<1e-10 # the two pairs at distance 6
     assert abs(e_default(x))<1e-12 # beyond the default rcut=5
     assert abs(e_long(x)-e_list(x))<1e-10
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_a_weak_coupling_gives_the_same_crystal_in_a_supercell(model):
+    """The cell-versus-supercell invariance for a weak tail 1e-5*exp(-d).
+    The builder underneath dropped a cell with sum|m| <= 1e-5, an
+    absolute threshold, so the tail kept its pairs inside the cell and
+    lost those to the images, and the cells of two and of six sites gave
+    two different energies per site"""
+    gs = [geometry.chain().get_supercell(n) for n in (2,6)]
+    es = []
+    for g in gs:
+        _,e = build(model,g,Jij=lambda r1,r2: 1e-5*tail(r1,r2),rcut=2.)
+        x = [(-1)**int(round(r[0])) for r in g.r] # alternating
+        es.append(e(x)/len(g.r))
+    assert abs(es[0])>1e-7 # the coupling is there
+    assert abs(es[0]-es[1])<1e-9*abs(es[0])

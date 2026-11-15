@@ -312,6 +312,24 @@ from .current import derivative
 
 
 
+def _has_entries(m):
+  """Whether a dense or sparse matrix has an entry that is not exactly
+  zero, the test of the parametric builders for keeping a cell.
+
+  It used to be sum|m| > 1e-5, an absolute threshold, so a weak coupling
+  such as 1e-7*exp(-d) kept its pairs inside the cell 0 and lost all its
+  pairs to the images, and a cell and its supercell gave two different
+  crystals. A threshold relative to the largest entry would still drop a
+  weak tail next to a strong first neighbor, and a sum over a cell grows
+  with the size of the cell, so no threshold is independent of the cell
+  it is written in. Which cells are built is set by the cells and the
+  rcut of the caller, so a cell is dropped only when nothing in it
+  couples. A NaN counts as an entry, so that a check downstream sees it"""
+  from scipy.sparse import issparse
+  if issparse(m): return m.count_nonzero()>0
+  return bool(np.any(np.asarray(m)!=0.))
+
+
 def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
         spinful_generator=False,cells=None):
   """The Hamiltonian of the hopping function fc(r1,r2), on the cells of
@@ -364,7 +382,7 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
           continue
         t.m = build(r,r2)
         t.dir = [i1,i2,i3] # store direction
-        if np.sum(np.abs(t.m))>0.00001: h.hopping.append(t) # append 
+        if _has_entries(t.m): h.hopping.append(t) # not an empty cell
   return h
 
 
@@ -406,7 +424,7 @@ def parametric_matrix(h,cutoff=2,fm=None,cells=None,spinful_generator=False):
         r2 = [ri + da for ri in r]
         t.m = full(fm(r,r2))
         t.dir = [i1,i2,i3] # store direction
-        if np.sum(np.abs(t.m))>0.00001: return t
+        if _has_entries(t.m): return t # not an empty cell
         else: return None
 #  from . import parallel
   ts = parallel.pcall(gett,dirs) # get hoppings
