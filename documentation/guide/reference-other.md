@@ -544,7 +544,8 @@ Optional arguments:
 
 An `Ultracell` is a supercell `hs` of a unit cell `h`, solved in the Bloch
 states of `h` with energy up to `emax`, and built by
-`u = h.get_ultracell(hs,emax=None)`. At a momentum $\mathbf k_S$ of the
+`u = h.get_ultracell(hs,emax=None)`. With `window=(emin,emax)` instead, the
+states below `emin` are frozen: full, and with the period of the lattice. At a momentum $\mathbf k_S$ of the
 supercell its matrix is
 
 $$
@@ -576,7 +577,7 @@ Optional arguments:
 
 - energies: the energies
 - delta=None: broadening; `None` takes the one `h.get_dos()` would use on
-  the mesh of the unit cell that the folded momenta form
+  a mesh of the unit cell with as many points as the folded momenta
 - nk=10: k-mesh of the ultracell, one number or one per direction
 - write=True: also write `DOS.OUT`
 
@@ -630,7 +631,8 @@ supercell, that returns the ultracell matrix.
 The self-consistent mean field of the supercell, with the density matrix,
 the Fermi level and the band energy of every iteration computed in the
 ultracell states. With every state kept it is the mean field of the
-supercell. Normal state only.
+supercell. A Nambu Hamiltonian is cut at $|E|\le E_\mathrm{max}$ on its BdG
+states, with `rebuild_basis=True`.
 
 Optional arguments:
 

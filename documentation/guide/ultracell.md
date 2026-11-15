@@ -94,6 +94,12 @@ The keywords that change the result:
 - `emax=None` in `h.get_ultracell()`: keep the states of the unit cell with
   energy up to `emax`; `None` keeps all of them, which is the supercell
   exactly (see [Keeping only the low-energy states](#keeping-only-the-low-energy-states))
+- `window=None` in `h.get_ultracell()`: keep the states with energy between
+  `emin` and `emax`, `window=(emin,emax)`. The states below `emin` are
+  frozen: they are full, they enter the density as a density with the
+  period of the lattice, and they do not respond to the modulation. This
+  pays off for a wide multi-orbital model, where the deep bands are far
+  from the modulated states. `emax=x` is the same as `window=(None,x)`
 - `rebuild_basis=False` in `h.get_ultracell()`: with `True`, the states at
   each momentum are those of the lattice-periodic part of `hs` instead of
   those of `h`, which only matters with a cut and a modulation whose
@@ -360,4 +366,12 @@ The keywords that change the result:
   $U=3t$ cut at `emax=0.5`, they left the moment 0.41 off, and the rebuilt
   basis 0.004 off
 
-The superconducting mean fields are not available on the ultracell.
+A superconducting mean field works the same way on a Hamiltonian with the
+Nambu degree of freedom. There the cut `emax` keeps the Bogoliubov-de Gennes
+(BdG) states with $|E|\le E_\mathrm{max}$, measured from the chemical
+potential, and the deep states are frozen with their pairing. So a uniform
+pairing is exact for any `emax`, also below the gap. The modulated part of
+the pairing converges slowly with `emax`, because the frozen states do not
+respond to the modulation, so we check it by raising `emax`. A cut on a
+Nambu Hamiltonian needs `rebuild_basis=True`, since the chemical potential
+moves during the loop.
