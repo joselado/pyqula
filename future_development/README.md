@@ -732,5 +732,15 @@ already reached once.
   with a cut (left until `window=`) and the zero net moment of the paper
   (a named constraint), and stages 3 and 4.
 
+- [`hopping_range.md`](hopping_range.md) -- a hopping given to
+  `g.get_hamiltonian(tij=...)` as a function or a `HoppingGenerator`, in 1D
+  or 2D at the default `is_multicell=False`, visits only the 9 nearest cells
+  and drops a farther hopping silently: measured on 15 November 2026 on the
+  triangular lattice, where 4 of the 6 second-neighbor bonds are lost (the
+  lowest band at a generic k is -0.667 instead of -1.146), and on the
+  one-site chain, with the ranked list of builders a read-only audit found
+  and the three ways to repair it. Nothing changed; it is a decision on the
+  default storage of a core path, with a recommendation.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).
