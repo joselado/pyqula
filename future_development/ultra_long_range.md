@@ -246,6 +246,62 @@ sublattice imbalance (without the imbalance, inversion maps $\mathbf k$ to $-\ma
 and a reversed direction of every hopping went unnoticed), s-wave pairing, a chain and a
 two-cell cubic supercell.
 
+## The design of window= and of the Nambu mean field (15 November 2026)
+
+The maintainer decided on 15 November 2026 to add `window=(emin,emax)` and a Nambu mean field
+with the cut $|E|\le E_\mathrm{max}$ (decisions 2 and 6). A Fable agent designed both from the
+code and from the TeX source of arXiv:2008.12573; nothing below is built yet. The two are one
+mechanism: each folded momentum gets an index range $[i_0,i_1)$ of its sorted levels, frozen
+below $i_0$, kept in between, dropped above. The Nambu cut is the window $(-E_\mathrm{max},
+E_\mathrm{max})$ on the BdG levels, and its deep states are the frozen density in the Nambu
+space.
+
+The paper has no frozen density and no window: Eq. (2) sums every band at the central k, and
+the runs keep the occupied states plus a number of empty ones, which is our `emax=`. In its
+language the frozen states enter only $\rho_{\mathbf Q=0}$ of Eq. (5), so the frozen density
+is an extension of ours.
+
+- API: `h.get_ultracell(hs,emax=None,window=None,rebuild_basis=False)`, with `emax=x` the same
+  as `window=(None,x)` and both at once a ValueError. For a normal state the window is absolute,
+  in the energies of the clean cell, as `emax=` is now; for Nambu, `emax=x` means $|E|\le x$
+  from the zero of the BdG Hamiltonian, and a Nambu window with `emin != -emax` raises, since
+  the kept space would not be closed under particle-hole symmetry. The spectral routines give
+  no weight outside the window; `get_vev` adds the frozen part.
+- The frozen states and the kept ones must come from the same diagonalization, or the density
+  matrix is not a projector, so the frozen density follows the basis: computed once on the
+  clean basis, rebuilt at every iteration otherwise. It is the unit-cell density matrix of the
+  frozen states tiled on the supercell, the inverse map of `FoldedBasis.periodic_hoppings`,
+  $\mathrm{dm}_f[D]_{ij}=\frac{1}{N_kN}\sum_{k_S,q}e^{2\pi i\,\mathbf p_q\cdot
+  \mathbf d_{ij}}\rho_0(\mathbf p_q)_{\alpha_i\alpha_j}$ with $\mathbf d_{ij}=\mathbf R_j-
+  \mathbf R_i+DM$, summed on the folded momenta of the same mesh (`frozen_entries` in
+  `meanfield.py`, added in `dm_entries` and `dm_full`). The Fermi search counts the frozen
+  levels at the bottom and raises when the filling does not reach above them; the band energy
+  adds $\mathrm{Tr}[P_f H_P]$ with $H_P$ the lattice-periodic part. The double counting reads
+  the density matrix and needs no change.
+- Nambu: the basis is the BdG states of the lattice-periodic part of the shifted Hamiltonian,
+  not electrons and holes apart, because the gap equation sums over every state: with BdG
+  states the frozen density carries an anomalous block, and a uniform superconductor is exact
+  for any `emax`. A Nambu shift is not rigid, so the states are solved after the shift
+  (`ultracell.dm`), and the ranges are recounted by energy at every iteration. Particle-hole
+  symmetry maps $k_S$ to $-k_S$, and the mesh is closed under it, so the kept space is closed
+  over the mesh. The Fermi level of the paired state is `superscf.BdGFermiLevel`, with an
+  electron-sector search on the ultracell and a compressibility from the levels of the
+  periodic part; the band energy is $(S+\mathrm{Tr}\,h_e)/2$. A Nambu mean field with a cut on
+  the clean basis raises NotImplementedError, since a clean basis means nothing once $\mu$
+  moves.
+- Tests: `frozen_entries` against the explicit sum of the frozen basis vectors on the Kekule
+  cell; a window against "ed" for two decoupled subsystems with the modulation on the upper
+  one; the band energy against $\sum_D\sum_{ij}H_D[i,j]\,\mathrm{dm}[D][i,j]$; zero modulation
+  with a uniform mean field against "ed"; a uniform attractive U at small `emax` against "ed",
+  which must fail with the frozen anomalous block set to zero; a window holding every state
+  equal to the supercell, normal and Nambu; particle-hole symmetry of a Nambu cut without
+  inversion; nested windows never below "ed" and monotonic; Hellmann-Feynman in a fixed basis.
+- Risks: the modulated part of the pairing converges only logarithmically in `emax`, since
+  frozen states do not respond (about a quarter of the pair response at $E_\mathrm{max}=W/3$,
+  $\Delta=W/100$), so a pair density wave with zero average needs a measured table in `emax`;
+  the Nambu recount can change the kept dimension by a multiplet between iterations. Not built:
+  a shell filling, Nambu `get_vev`, asymmetric Nambu windows, a response of the frozen states.
+
 ## The method, and what it becomes in a tight-binding basis
 
 The question is how to compute a crystal whose potential, exchange field or order
