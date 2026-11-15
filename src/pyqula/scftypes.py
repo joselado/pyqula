@@ -171,16 +171,7 @@ class scfclass():
       elif mode=="Hubbard collinear": # Hubbard model
         print("Adding Hubbard collinear interaction")
         for i in range(nat): 
-          interactions.append(meanfield.hubbard_density(i,nat,g=g)) 
-  # store this interaction
-      elif mode=="Coulomb": # Coulomb interaction
-        interactions = meanfield.coulomb_interaction(
-                self.hamiltonian.geometry,has_spin=self.hamiltonian.has_spin,
-                vc=g,**kwargs)
-      elif mode=="fastCoulomb": # Coulomb interaction
-        interactions = meanfield.fast_coulomb_interaction(
-                self.hamiltonian.geometry,has_spin=self.hamiltonian.has_spin,
-                vc=g,**kwargs)
+          interactions.append(meanfield.hubbard_density(i,nat,g=g))
       elif mode=="V": # V interaction
 #        self.correlator_mode = "1by1" # mode to calculate the correlators
         self.bloch_multicorrelator = True
@@ -201,9 +192,9 @@ class scfclass():
               # factor 2 in g due to spin degree of freedom
               interactions.append(meanfield.v_ij_spinless(i,j,nat,g=2*g,d=d)) 
       else: # ups
-          raise ValueError("unknown interaction mode; the accepted ones are "
-                  "'Hubbard', 'U', 'Hubbard collinear', 'Coulomb', "
-                  "'fastCoulomb' and 'V'")
+          raise ValueError("unknown interaction mode '"+str(mode)+"'; the "
+                  "accepted ones are 'Hubbard', 'U', 'Hubbard collinear' "
+                  "and 'V'")
     self.interactions += interactions # store list
     if timing: print("Time in creating MF operators",time.perf_counter()-t0)
   def update_expectation_values(self):
