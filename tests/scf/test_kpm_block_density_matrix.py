@@ -146,7 +146,7 @@ def test_the_jax_solvers_refuse_kpm_prec():
     """use_jax=True diagonalizes, so a KPM precision would be ignored,
     and an ignored keyword is refused like the other KPM-only ones"""
     h = geometry.chain().get_hamiltonian()
-    with pytest.raises(NotImplementedError, match="kpm_prec"):
+    with pytest.raises(TypeError, match="kpm_prec"):
         h.get_mean_field_hamiltonian(U=1., use_jax=True, kpm_prec="single",
                 nk=4)
 

@@ -652,15 +652,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "not support a per-site (array) filling, got %r; use "
                     "the default (numpy) engine, use_jax=False, for a "
                     "per-site filling target" % (filling,))
-        kpm_only = {"scale": scale, "npol": npol, "ne": ne, "cores": cores,
-                "kpm_prec": kpm_prec, "kpm_radius": kpm_radius}
-        kpm_only_set = {k: v for k, v in kpm_only.items() if v is not None}
-        if kpm_only_set:
-            raise NotImplementedError("VJinteraction's use_jax=True only "
-                    "supports integration=\"ed\" (already enforced above), "
-                    "so these integration=\"kpm\"-only tuning kwargs have no "
-                    "effect and must not be silently ignored: %r"
-                    % (kpm_only_set,))
+        # use_jax=True diagonalizes (integration="ed", enforced above), so
+        # the KPM keywords have no effect, a TypeError as for "ed"
+        from .densitydensity_kpm import refuse_kpm_keywords
+        refuse_kpm_keywords(dict(scale=scale, npol=npol, ne=ne, cores=cores,
+                kpm_prec=kpm_prec, kpm_radius=kpm_radius), "ed")
         from .vjinteraction_jax import VJinteraction_jax
         # T left at _T_UNSET (i.e. the caller never passed T at all) picks
         # the jax engine's own default (None -> vjinteraction_jax.
