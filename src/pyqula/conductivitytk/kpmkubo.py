@@ -571,8 +571,9 @@ def _box_weights(ne,fermi,w,a,b,T=0.):
     Drude peak at w = 0.
 
     The interpolation is only needed at the two edges of the box, so it is
-    kept local there. With psi a smooth window that is one within 36 nodes
-    of either edge and zero from 72 nodes on (_edge_window), and B the box,
+    kept local there. With psi a smooth window that is one at either edge
+    (to 1e-12 within 6 nodes of it), one half at 36 nodes and zero from 72
+    nodes on (_edge_window), and B the box,
 
       int B G dtheta = int B (G psi) dtheta + int B (1 - psi) G dtheta.
 
@@ -641,10 +642,12 @@ def _box_weights(ne,fermi,w,a,b,T=0.):
 
 
 def _edge_window(th,the,tau):
-    """Smooth window in theta, at the angles th in [0, pi], one within 6 tau
-    of the edge the and zero beyond 12 tau, each side an error function of
-    width tau, so it differs from one and from zero there by
-    erfc(6)/2 ~ 1e-17. The Fourier content of a side falls as
+    """Smooth window in theta, at the angles th in [0, pi], one at the edge
+    the, one half at 6 tau from it and zero beyond 12 tau, each side an
+    error function of width tau centered 6 tau from the edge, so it differs
+    from one at the edge and from zero beyond 12 tau by erfc(6)/2 ~ 1e-17,
+    and from one by erfc(5)/2 ~ 8e-13 at tau. The Fourier content of a side
+    falls as
     exp(-k^2 tau^2/4), so with tau = 6 pi/ne it is exp(-22), 2e-10, at
     k = ne/2, the room the ne nodes leave above the degree 2M-2 = ne/2 - 2
     of G, and G times the window is interpolated as well as G itself. G
@@ -676,24 +679,28 @@ def _fermi_x(x):
     return np.where(x>0.,e/(1.+e),1./(1.+e))
 
 
-def _thermal_ratio(y,w,T,yw=None):
+def _thermal_ratio(y,w,T,yw=None,scale=1.):
     """r = [f(y) - f(y+w)]/w for the energies y measured from the Fermi
     level, with the difference taken without cancellation: for u < v,
     f(u) - f(v) = f(u) (1 - f(v)) (1 - exp(-(v-u)/T)). It is -df/dy =
     f (1 - f)/T at w = 0. yw is y + w, passed when it is known to more
-    digits than the sum (near the edge at the Fermi level minus w)"""
+    digits than the sum (near the edge at the Fermi level minus w). The
+    result is multiplied by scale, which at w = 0 is applied to 1/T first,
+    so that a scale of order T keeps a vanishing T from overflowing"""
     if yw is None: yw = y+w
     u,v = (yw,y) if w<0. else (y,yw)
     fu,gv = _fermi_x(u/T),_fermi_x(-v/T) # f(u) and 1 - f(v)
-    if w==0.: return fu*gv/T
-    return fu*gv*(-np.expm1(-abs(w)/T))/abs(w)
+    if w==0.: return fu*gv*(scale/T)
+    return fu*gv*(-np.expm1(-abs(w)/T))/abs(w)*scale
 
 
-def _thermal_slope(y,w,T,yw=None):
+def _thermal_slope(y,w,T,yw=None,scale=1.):
     """[p(y) - p(y+w)]/w with p = -df/dy = f (1 - f)/T, without
-    cancellation: p(u) - p(v) = [f(u) - f(v)] [1 - f(u) - f(v)]/T"""
+    cancellation: p(u) - p(v) = [f(u) - f(v)] [1 - f(u) - f(v)]/T, times
+    scale, applied to 1/T first as in _thermal_ratio"""
     if yw is None: yw = y+w
-    return _thermal_ratio(y,w,T,yw=yw)*(_fermi_x(-y/T)-_fermi_x(yw/T))/T
+    return _thermal_ratio(y,w,T,yw=yw)*(_fermi_x(-y/T)-_fermi_x(yw/T)) \
+            *(scale/T)
 
 
 def _rise(x0,e):
@@ -864,14 +871,16 @@ def _thermal_moments(ne,fermi,w,a,b,T,dth_w):
         # other edge
         if nu==fermi: y,yw = y,y+w
         else: y,yw = y-w,y
-        if w==0.: g = _thermal_ratio(y,0.,T)
-        else: g = a*np.sin(th)*_thermal_slope(y,w,T,yw=yw)
-        S = _exp_sums(g,N,ne) # sum_m g_m exp(i pi k m/N)
+        # g times the step h, of order one at any T: g alone grows as
+        # 1/(T max(|w|,T)) and overflows for a T near the smallest float
+        if w==0.: g = _thermal_ratio(y,0.,T,scale=h)
+        else: g = a*np.sin(th)*_thermal_slope(y,w,T,yw=yw,scale=h)
+        S = _exp_sums(g,N,ne) # sum_m h g_m exp(i pi k m/N)
         if p["atpi"] and not p["at0"]: # theta_m = pi - h (m + 1/2)
             X += (-1.)**k*np.exp(-1j*k*h/2.)*np.conj(S)
         else: X += np.exp(1j*k*th[0])*S
-    if w==0.: return h*X.real
-    R[1:] = -h*X[1:].imag/k[1:]
+    if w==0.: return X.real # X carries the step h already
+    R[1:] = -X[1:].imag/k[1:]
     a,b,T = float(a),float(b),float(T) # the cache keys of _fermi_excess
     G0 = _fermi_excess(float(fermi),a,b,T)
     G1 = _fermi_excess(float(fermi-w),a,b,T)

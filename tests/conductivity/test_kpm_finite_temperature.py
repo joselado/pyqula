@@ -151,6 +151,48 @@ def test_absorption_below_the_node_spacing_is_the_energy_integral():
                     (fermi, T, w)
 
 
+def test_absorption_with_a_tail_at_one_end_of_the_spectrum_is_the_energy_integral():
+    """A Fermi level in the upper and in the lower part of the band, at a T
+    whose thermal tail reaches one end of the rescaled spectrum and not the
+    other, so that the grid of the edge starts at theta = 0 or at pi; and a
+    box wider than the two tails, so that each edge has its own grid. The
+    absorptive part is still the energy integral"""
+    st, mu = _metallic_cell()
+    E, j, spacing = _nodes(st)
+    d = st.dirs
+    for x, T, ws in [(0.6, 3.*spacing, [spacing/3., 0.]),
+            (-0.6, 3.*spacing, [spacing/3., 0.]),
+            (0.1, spacing/3., [0.8, -0.8])]:
+        fermi = st.b+x*st.a
+        Y = kpmkubo._SUPPORT*T/st.a # the tail, in the rescaled energy
+        if x != 0.1: assert (x+Y >= 1.) != (x-Y <= -1.) # one end only
+        else: assert 0.8 > 2.*kpmkubo._SUPPORT*T # separate tails
+        out = kpmkubo.absorptive(st, mu, np.array(ws), fermi=fermi, T=T)
+        for iw, w in enumerate(ws):
+            ref = _thermal_reference(st, mu, w, fermi, T, spacing)
+            scale = np.max(np.abs(ref))
+            assert scale > 1e-4 # a real signal
+            assert np.max(np.abs(out[iw][np.ix_(d, d)]-ref)) < 1e-10*scale, \
+                    (x, T, w)
+
+
+def test_a_temperature_near_the_smallest_float_stays_finite():
+    """At T = 1e-300 and 1e-305, with boxes from 2e-9 to a third of the node
+    spacing, the weights stay finite and give the box of T=0, to the
+    digits that a box so narrow keeps"""
+    st, mu = _metallic_cell()
+    E, j, spacing = _nodes(st)
+    fermi = E[j] + 0.37*(E[j+1]-E[j])
+    ws = np.array([2e-9, 1e-6, spacing/3.])
+    s0 = kpmkubo.absorptive(st, mu, ws, fermi=fermi, T=0.)
+    for T in [1e-300, 1e-305]:
+        s1 = kpmkubo.absorptive(st, mu, ws, fermi=fermi, T=T)
+        assert np.all(np.isfinite(s1))
+        for iw in range(len(ws)):
+            scale = np.max(np.abs(s0[iw]))
+            assert np.max(np.abs(s1[iw]-s0[iw])) < 1e-6*scale, (T, ws[iw])
+
+
 def test_absorption_below_the_node_spacing_does_not_depend_on_ne():
     """At T a fifth of the node spacing the same moments give the same
     absorptive part with 4 and 6 nodes per moment, for frequencies below,
