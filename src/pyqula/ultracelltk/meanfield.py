@@ -132,8 +132,10 @@ def occupied(states,ik,delta):
     orbitals of the occupied states at kpoint ik, a chunk of states at a
     time, so that the real-space states never take more than a chunk"""
     es = states.es[ik] + states.shift
-    keep = es<=empty_ratio*delta
-    occ,vs = 1./(1.+np.exp(es[keep]/delta)),states.vs[ik][:,keep]
+    # eigh sorts the eigenvalues, so the occupied states are the first
+    # ones and a slice of the eigenvectors is a view, not a copy
+    nocc = int(np.sum(es<=empty_ratio*delta))
+    occ,vs = 1./(1.+np.exp(es[0:nocc]/delta)),states.vs[ik][:,0:nocc]
     for sl in state_chunks(states.basis,len(occ)):
         yield occ[sl],states.real_space(ik,vs[:,sl])
 

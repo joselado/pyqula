@@ -95,11 +95,13 @@ def site_sum(u,kS,weight,operator=None):
     time. Returns it and the eigenvalues at kS"""
     es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
     w = weight(es)
-    keep = w!=0.
-    w,vs = w[keep],vs[:,keep]
+    # the states with a weight, taken a chunk of columns at a time, so
+    # that only a chunk of the eigenvectors is copied and not all of them
+    keep = np.nonzero(w!=0.)[0]
+    w = w[keep]
     out = np.zeros(u.hs.intra.shape[0])
     for sl in state_chunks(u.basis,len(w)):
-        Phi = real_space_states(u.basis,kS,vs[:,sl],U,valid)
+        Phi = real_space_states(u.basis,kS,vs[:,keep[sl]],U,valid)
         if operator is None: w2 = np.abs(Phi)**2
         else: w2 = np.real(np.conjugate(Phi)*np.asarray(operator@Phi))
         out += w2@w[sl]
