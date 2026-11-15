@@ -297,11 +297,10 @@ class FoldedBasis():
         return self.pad([e[iq,0:c] for iq,c in enumerate(cs)],
                 [w[iq,:,0:c] for iq,c in enumerate(cs)])
     def pad(self,es,ws):
-        """Pad the states of every folded momentum to the largest number"""
+        """Pad the states of every folded momentum to the largest number.
+        When the cut keeps no state at any folded momentum of this kS the
+        ultracell has no state there, and the arrays have zero width"""
         bmax = max([len(e) for e in es])
-        if bmax==0:
-            raise ValueError("no state of the unit cell is below emax="
-                    +str(self.emax)+", so the basis is empty")
         E = np.zeros((self.N,bmax))
         U = np.zeros((self.N,self.norb,bmax),dtype=np.complex128)
         valid = np.zeros((self.N,bmax),dtype=bool)

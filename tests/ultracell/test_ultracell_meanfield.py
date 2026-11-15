@@ -348,3 +348,32 @@ def test_fixed_chemical_potential_every_state_is_the_supercell(spin):
     assert abs(e2-e3)<1e-8
     k = (0.21,0.33,0.) if spin else (0.37,0.,0.)
     assert same_state(u2,h3,k=k)<1e-7
+
+
+@pytest.mark.parametrize("rebuild",[False,True])
+def test_kpoint_without_kept_states_in_the_mean_field(rebuild):
+    """Spinless graphene on a 2x2 cell with emax=-2.7 keeps Gamma (E=-3)
+    and the six momenta next to it (E=-2.80) on the folded 8x8 mesh, and
+    no state at kS=(1/2,0) of the 4x4 mesh. The backend must skip that
+    kS: one electron on the mesh fills Gamma alone, whatever the empty
+    kpoints, so the trace of the density matrix is one electron"""
+    from pyqula.ultracelltk.basis import FoldedBasis
+    from pyqula.ultracelltk.meanfield import (SparseBackend, MeshStates,
+            fermi_level)
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    hs = h.get_supercell([2,2])
+    hs.ultracell_basis = FoldedBasis(h,hs,emax=-2.7)
+    hs.ultracell_basis.rebuild = rebuild
+    n = hs.intra.shape[0]
+    states = MeshStates(hs,nk=4)
+    kept = [len(e) for e in states.eigenvalues()]
+    assert min(kept)==0 and sum(kept)==7 # Gamma and its six neighbors
+    needed = {(0,0,0): (np.arange(n),np.arange(n))}
+    dm,fermi = SparseBackend(nk=4,T=1e-7).dm_with_fermi(hs,needed,
+            1./(16*n))
+    assert -3.<fermi<-2.8
+    assert abs(16*np.real(np.sum(dm[(0,0,0)].diagonal()))-1.)<1e-8
+    # a kpoint without states in the T=0 cut of the Fermi level
+    es = [np.array([-1.,0.]),np.zeros(0)]
+    assert abs(fermi_level(es,3,1./6)+0.5)<1e-12

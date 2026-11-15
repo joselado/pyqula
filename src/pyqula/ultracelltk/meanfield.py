@@ -253,6 +253,7 @@ def fermi_level(esk,n,filling,T=0.):
         raise ValueError("filling="+str(filling)+" needs "+str(ntarget)
                 +" occupied states, and the ultracell keeps "+str(kept)
                 +" on this mesh; build it with a larger emax")
-    top = max(np.max(e) for e in esk) + 100. # above every kept state
+    # above every kept state; a kpoint where the cut keeps nothing has none
+    top = max(np.max(e) for e in esk if len(e)>0) + 100.
     es = np.concatenate(esk + [np.full(total-kept,top)])
     return get_fermi_energy_T(es,filling,T=T)

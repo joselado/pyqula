@@ -478,3 +478,56 @@ def test_nondiagonal_rebuilt_basis(name,M):
         if m==0: continue
         e = eigh(heff,eigvals_only=True)
         assert np.max(np.abs(E[iq,0:m]-e[0:m]))<1e-12
+
+
+def clean_levels(h,u,ks,emax):
+    """The levels of the unit cell h up to emax at the folded momenta of
+    every kS of ks, which at zero modulation are the ultracell levels"""
+    hk = h.get_hk_gen()
+    out = []
+    for k in ks:
+        for p in u.basis.folded_momenta(k):
+            e = np.linalg.eigvalsh(dense(hk(p)))
+            out.append(e[e<=emax])
+    return np.concatenate(out)
+
+
+@pytest.mark.parametrize("rebuild",[False,True])
+def test_kpoint_without_kept_states(rebuild):
+    """An emax that keeps states at some kS of the mesh and none at the
+    others. Spinless graphene on a 2x2 cell, kS on a 4x4 mesh: at kS=0 the
+    folded momenta hold Gamma (E=-3), while at kS=(1/2,0) the lowest level
+    is -|2+i|=-2.24, so emax=-2.7 keeps nothing there. That ultracell has
+    no state at that kS. At zero modulation the DOS must be the
+    Lorentzians of the levels of the unit cell up to emax on the folded
+    mesh, the spectral function at a momentum without a kept state must
+    vanish, and the LDOS summed over the sites must be N times the DOS"""
+    from pyqula.klist import kmesh
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    hs = h.get_supercell([2,2])
+    es = np.linspace(-3.5,-2.,40)
+    delta = 0.05
+    ks = kmesh(2,nk=4)
+    for emax in [-2.99,-2.7]:
+        u = h.get_ultracell(hs,emax=emax,rebuild_basis=rebuild)
+        counts = [np.sum(u.basis.states(k)[2]) for k in ks]
+        assert min(counts)==0 and max(counts)>0 # some kS keep nothing
+        d = u.get_dos(energies=es,delta=delta,nk=4,write=False)[1]
+        e0 = clean_levels(h,u,ks,emax)
+        ref = np.sum(delta/((es[:,None]-e0[None,:])**2+delta**2),
+                axis=1)/(np.pi*len(ks)*u.basis.N)
+        assert np.max(np.abs(d-ref))<1e-10*np.max(ref)
+    # (1/8,0) folds onto kS=(1/4,0), whose folded momenta are all above
+    # -2.99; Gamma folds onto kS=0
+    u = h.get_ultracell(hs,emax=-2.99,rebuild_basis=rebuild)
+    a = u.get_kdos_bands(kpath=[[0.125,0.,0.],[0.,0.,0.]],energies=es,
+            delta=delta,write=False)[2]
+    assert np.max(np.abs(a[0:len(es)]))==0.
+    lor = delta/((es+3.)**2+delta**2)/np.pi
+    assert np.max(np.abs(a[len(es):]-lor))<1e-10*np.max(lor)
+    u = h.get_ultracell(hs,emax=-2.7,rebuild_basis=rebuild)
+    l = u.get_ldos(e=-2.8,delta=delta,nk=4,write=False)[2]
+    d = u.get_dos(energies=np.array([-2.8]),delta=delta,nk=4,
+            write=False)[1][0]
+    assert abs(np.sum(l)-4*d)<1e-10*abs(4*d)
