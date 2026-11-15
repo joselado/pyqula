@@ -402,12 +402,14 @@ from .kpmtk.momenttoprofile import generate_profile
 
 
 def dos(m_in,xs,ntries=20,n=200,scale=10.):
-  """Return the density of states"""
+  """Return the density of states per state and per unit energy at the
+  energies xs, the same normalization as tdos"""
   if scale is None: scale = 10.*np.max(np.abs(m_in.data)) # estimate of the value
   mus = random_trace(m_in/scale,ntries=ntries,n=n)
   check_scale(mus,scale)
-  ys = generate_profile(mus,xs/scale) # generate the DOS
-  return ys # return the DOS 
+  # the profile is a density in x = E/scale, so dE = scale dx
+  ys = generate_profile(mus,xs/scale).real/scale # generate the DOS
+  return ys # return the DOS
 
 
 
