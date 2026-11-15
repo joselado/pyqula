@@ -589,7 +589,7 @@ def get_supercell(self,nsuper,store_primal=False):
     # a copy, never an alias of self: the caller is entitled to mutate
     # the returned geometry without touching the one it asked about
     if self.dimensionality==0: return self.copy() # zero dimensional
-    if np.array(nsuper).shape==(3,3): # if a matrix is given
+    if np.ndim(nsuper)==2: # a matrix, 3x3 or dxd (padded there)
         return supercelltk.non_orthogonal_supercell(self,nsuper)
     if self.dimensionality==1:
         if checkclass.is_iterable(nsuper): nsuper = nsuper[0]

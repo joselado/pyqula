@@ -165,6 +165,29 @@ def test_matrix_of_the_dimensionality_is_padded():
     assert np.max(np.abs(spectrum(hs1,k)-spectrum(hs3,k)))<1e-10
 
 
+def test_the_geometry_pads_a_matrix_of_its_dimensionality():
+    """g.get_supercell with a dxd matrix is the supercell of the padded 3x3
+    one, on the geometry path as on the Hamiltonian path, with or without
+    the primitive geometry stored, and another shape is refused"""
+    for g,M2 in [(geometry.honeycomb_lattice(),[[2,1],[-1,1]]),
+            (geometry.triangular_lattice(),[[1,0],[6,1]]),
+            (geometry.chain(),[[3]])]:
+        d = g.dimensionality
+        M3 = np.identity(3,dtype=int)
+        M3[0:d,0:d] = M2
+        for primal in [False,True]:
+            g2 = g.get_supercell(M2,store_primal=primal)
+            g3 = g.get_supercell(M3,store_primal=primal)
+            assert np.array_equal(g2.r,g3.r)
+            for a in ["a1","a2","a3"]:
+                assert np.array_equal(getattr(g2,a),getattr(g3,a))
+            assert (getattr(g2,"primal_geometry",None) is not None)==primal
+        h = g.get_hamiltonian(has_spin=False)
+        assert np.array_equal(h.get_supercell(M2).geometry.r,g3.r)
+    with pytest.raises(ValueError,match="supercell matrix"):
+        geometry.honeycomb_lattice().get_supercell([[2,1,0],[-1,1,0]])
+
+
 def test_ncut_is_refused_for_a_matrix():
     """The repetitions take a range cut ncut, a matrix supercell keeps
     every hopping, so ncut with a matrix is refused with a message"""

@@ -6,23 +6,32 @@ from . import sculpt
 from numba import jit
 
 
+def padded_matrix(m,dim):
+  """The supercell matrix m as a 3x3 array of floats. On a dim-dimensional
+  lattice m can also be dim x dim, and it is then padded with 1 along the
+  missing directions"""
+  mf = np.array(m,dtype=float)
+  if mf.shape not in [(3,3),(dim,dim)]:
+    raise ValueError("a supercell matrix of a "+str(dim)+"-dimensional "
+            "lattice is "+str(dim)+"x"+str(dim)+" or 3x3, got shape "
+            +str(mf.shape))
+  out = np.identity(3)
+  out[0:mf.shape[0],0:mf.shape[1]] = mf
+  return out
 
-def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=None):
+
+
+def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill"):
   """Generate a non orthogonal supercell based on a tranformation
   matrix of the unit vectors, pretty much as VESTA does
 
   In the fill mode the cells searched for atoms are the box that the
-  entries of m reach (see search_box), so reducef, which used to set the
-  size of that search from the volume increase, has no effect; it is still
-  accepted because the twisted-multilayer builders pass it. ncheck is used
+  entries of m reach (see search_box). ncheck is used
   by the brute mode only"""
   # rounded and not truncated, so that a matrix computed in floating
   # point, with 1.9999999999 for 2, is the matrix of those integers, for
   # the cell vectors and for the recorded supercell_matrix alike
-  mf = np.array(m,dtype=float)
-  if mf.shape!=(3,3):
-    raise ValueError("the supercell matrix must be 3x3, got shape "
-            +str(mf.shape))
+  mf = padded_matrix(m,gin.dimensionality)
   if not np.all(np.abs(mf-np.round(mf))<1e-6): # also refuses a nan
     raise ValueError("the supercell matrix must have integer entries, got "
             +str(mf.tolist()))

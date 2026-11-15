@@ -53,7 +53,9 @@ Arguments
 - nsuper: size of the supercell. A number or a tuple multiplies the lattice
   vectors. A 3x3 integer matrix $M$ gives a general supercell, with lattice
   vectors $\mathbf a'_i=\sum_j M_{ij}\mathbf a_j$ (see
-  [Band unfolding](unfolding.md))
+  [Band unfolding](unfolding.md)). On a $d$-dimensional lattice $M$ can
+  also be $d\times d$, and it is then padded with 1 along the missing
+  directions
 
 Optional arguments
 

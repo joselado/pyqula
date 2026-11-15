@@ -71,14 +71,8 @@ def matrix_supercell(hin,M,sparse=True,ncut=None):
     h = hin.get_multicell() # a copy
     if h.dimensionality==0: return h
     dim = h.dimensionality
-    Mf = np.array(M,dtype=float)
-    if Mf.shape not in [(3,3),(dim,dim)]:
-        raise ValueError("a supercell matrix of a "+str(dim)+"-dimensional "
-                "lattice is "+str(dim)+"x"+str(dim)+" or 3x3, got shape "
-                +str(Mf.shape))
-    M3f = np.identity(3) # padded with 1 along the missing directions
-    M3f[0:Mf.shape[0],0:Mf.shape[1]] = Mf
-    Mf = M3f
+    from ..supercell import padded_matrix
+    Mf = padded_matrix(M,dim) # 3x3, padded with 1 along missing directions
     # rounded and not truncated, so that a matrix computed in floating
     # point, with 1.9999999999 for 2, is the matrix of those integers
     if not np.all(np.abs(Mf-np.round(Mf))<1e-6): # also refuses a nan
