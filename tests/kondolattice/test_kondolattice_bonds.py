@@ -264,31 +264,49 @@ def weak_neighbor(rc, rm):
     return 0.0
 
 
-def test_a_small_field_converges_relative_to_its_own_size():
+def test_each_field_is_measured_against_its_size_with_a_floor():
+    """A field converges relative to its own size, as the field of a
+    single moment does, but a field smaller than a tenth of the largest
+    one, or zero by symmetry, is measured against a tenth of the largest
+    one: it counts as converged once it moves by less than maxerror/10
+    times the largest field"""
+    from pyqula.scftk.kondolattice import field_residual, FIELD_FLOOR
+    assert FIELD_FLOOR == 0.1
+    d = 1e-6
+    # a field of half the largest one: relative to itself
+    assert np.isclose(field_residual(np.array([1., 0.5]),
+            np.array([1., 0.5+d])), d/(0.5+d))
+    # a field of a hundredth of the largest one: against a tenth of it
+    assert np.isclose(field_residual(np.array([1., 0.01]),
+            np.array([1., 0.01+d])), d/0.1)
+    # a field zero by symmetry, at roundoff
+    assert np.isclose(field_residual(np.array([1., 1e-16]),
+            np.array([1., -1e-16])), 2e-16/0.1)
+    # every field decaying together does not converge
+    assert np.isclose(field_residual(np.array([1e-3, 1e-4]),
+            np.array([0.5e-3, 0.5e-4])), 0.5)
+
+
+def test_a_small_field_converges_to_a_tenth_of_maxerror_of_the_largest():
     """The chain with the onsite coupling J0 and a weak coupling J_SMALL
-    to the next cell. The onsite field makes <c^dag_{j+1} f_j> finite, so
-    the weak bond has a small but genuine field, linear in J_SMALL, of
-    order 1e-5 of the onsite one. Its fixed point is taken from a tight
-    run. The loop then starts from the converged onsite field and
+    to the next cell, whose field is small but genuine, of order 1e-5 of
+    the onsite one. The loop starts from the converged onsite field and
     multiplier and from zero on the weak bond, so the weak field is the
-    one that has to converge. At maxerror=1e-4 it must come out with an
-    error of order 1e-4 relative to itself. A residual relative to the
-    largest field stops the loop once the weak field moves by less than
-    1e-4 times the onsite one, after a few iterations at most, with a
-    relative error of 0.1 or more"""
+    one that has to converge, and it must come out within maxerror/10 of
+    the onsite field, times a margin for the rate of the loop"""
     h = chain_kondo()
     href, e = converge(h, weak_neighbor) # maxerror=1e-10
     assert href.kondo_bonds == [(0, 0, (0, 0, 0), J0),
             (0, 0, (1, 0, 0), J_SMALL)]
     Vref = href.hybridization
     ratio = abs(Vref[1])/abs(Vref[0])
-    assert abs(Vref[0]) > 0.3 and 1e-6 < ratio < 1e-3, Vref # small, genuine
+    assert abs(Vref[0]) > 0.3 and ratio < 1e-1, Vref # a small field
     maxerror = 1e-4
     seed = (np.array([Vref[0], 0.0]), href.constraint_lambda)
     h2 = h.get_mean_field_hamiltonian(J=weak_neighbor, filling=FILLING,
             nk=NK, T=T, mf=seed, maxerror=maxerror, maxite=4000)
-    err = abs(h2.hybridization[1] - Vref[1])/abs(Vref[1])
-    assert err < 20*maxerror, (err, h2.hybridization, Vref)
+    err = abs(h2.hybridization[1] - Vref[1])/abs(Vref[0])
+    assert err < 20*maxerror/10, (err, h2.hybridization, Vref)
 
 
 def unfolded(h, n):

@@ -65,38 +65,34 @@ from ..multihopping import MultiHopping
 N_SPIN = 2 # N in the large-N Coqblin-Schrieffer coupling J/N: the number of
            # spin components of a spin-1/2 (Q=1) local moment
 
-FIELD_PRECISION = 1e-10 # precision of a field relative to the largest one:
-           # a field is a sum over the k-mesh and the states, so it is known
-           # to roundoff times the largest field at best, and a field that
-           # vanishes by symmetry sits there (see field_residual). 1e-10
-           # leaves a wide margin over the roundoff of a large mesh, and a
-           # tolerance at or below it keeps the residual relative to the
-           # largest field
+FIELD_FLOOR = 0.1 # the smallest size a field is measured against, as a
+           # fraction of the largest field: a field that vanishes by symmetry
+           # counts as converged once it moves by less than maxerror/10 times
+           # the largest field, the maintainer's choice of 15 November 2026
 
 
-def field_residual(V, target, maxerror):
+def field_residual(V, target):
     """Largest change of the fields V towards their targets, each one
     relative to its own size max(|V_b|, |target_b|), as the field of a
-    single moment converges, so that a small but genuine field converges
-    to maxerror relative to itself and not to maxerror times the largest
-    field.
+    single moment converges, so that a field converges to maxerror relative
+    to itself and not to maxerror times the largest field.
 
-    The size of a field is taken as at least FIELD_PRECISION/maxerror
-    times the largest field: a field that vanishes by symmetry (the
-    first-neighbor bond of a particle-hole symmetric chain with an onsite
-    V) sits at roundoff, where its relative change is of order one at
-    every iteration, so it counts as converged once it moves by less than
-    FIELD_PRECISION times the largest field. The floor follows the largest
-    field, so a trajectory where every V decays together towards V=0
-    still has a constant residual and does not converge. With one field
-    the floor is never reached and the residual is that of the field."""
+    The size of a field is taken as at least FIELD_FLOOR times the largest
+    field: a field that vanishes by symmetry (the first-neighbor bond of a
+    particle-hole symmetric chain with an onsite V) sits at roundoff, where
+    its relative change is of order one at every iteration, so it counts
+    as converged once it moves by less than maxerror*FIELD_FLOOR times the
+    largest field, and so does a field smaller than FIELD_FLOOR times the
+    largest one. The floor follows the largest field, so a trajectory where
+    every V decays together towards V=0 still has a constant residual and
+    does not converge. With one field the floor is never reached and the
+    residual is that of the field."""
     V = np.asarray(V)
     if len(V) == 0: return 0.0 # no bonds, nothing to converge
     size = np.maximum(np.abs(V), np.abs(target)) # of each field
     vmax = np.max(size)
     if vmax == 0.0: return 0.0 # all exactly zero
-    if maxerror > FIELD_PRECISION: floor = vmax*(FIELD_PRECISION/maxerror)
-    else: floor = vmax # a tolerance this tight is below the precision
+    floor = vmax*FIELD_FLOOR
     return np.max(np.abs(target - V)/np.maximum(size, floor))
 
 
@@ -402,7 +398,7 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
         # Each field is relative to its own size, down to a floor that
         # follows the largest field, for a field that vanishes by symmetry
         # (see field_residual)
-        v_resid = field_residual(V, -Jg*A, maxerror)
+        v_resid = field_residual(V, -Jg*A)
         return max(v_resid, np.max(np.abs(nfocc - Q)))
 
     def pack(h, V, lam, nfocc, converged):
