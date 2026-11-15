@@ -72,20 +72,27 @@ def get_pairing_modes():
 
 
 def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
-    **kwargs):
+    rcut=None,**kwargs):
     """Create a generator, taking as input two positions, and returning
-    the 2x2 pairing matrix"""
+    the 2x2 pairing matrix. rcut is the distance a pairing given as a
+    callable mode reaches (see callable_range); a registered mode has a
+    known range and takes no rcut"""
     # wrapper for the amplitude and d-vector
     deltaf = get_callable(delta) # callable for the amplitude
     df = get_callable(d) # callable for the d-vector
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
-        rcut = None # of unknown range, every pair has to be evaluated
+        rcut = callable_range(self,rcut) # every pair beyond it is zero
     else:
         if mode not in _pairing_builders:
             raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
               +"one of "+str(list(pairing_modes))+", or a callable returning "
               +"the 2x2 pairing matrix")
+        if rcut is not None:
+            raise TypeError("got rcut and the registered pairing mode '"
+              +str(mode)+"', two ranges for the same pairing; a registered "
+              +"mode reaches its own distance (nn selects the shell), and "
+              +"rcut is the range of a pairing given as a callable mode")
         if kwargs.get("nn",1)>1 and "dist2" not in kwargs:
             # the distance of the nn-th shell once, not once per pair
             nn = kwargs["nn"]
@@ -110,37 +117,79 @@ def _pairing_range(kw):
     return np.sqrt(max(1.0,kw.get("dist2",1.0))+1e-2)
 
 
-def check_fermi_antisymmetry(h,weightf,tol=1e-6):
+_TOL = 1e-6 # a shell sitting exactly at rcut is kept whole
+
+
+def callable_range(h,rcut=None):
+    """The distance a pairing given as a callable mode reaches: every pair
+    of sites farther than rcut is zero. None is 5.0 in a periodic system,
+    as for a hopping function of get_hamiltonian, and no cut in a finite
+    one, where every pair is evaluated. A callable has no range of its
+    own: it used to be evaluated on the box of geometry.ncells=2 cells,
+    so on the one-site chain a third-neighbor pairing given as a function
+    added nothing, without a warning"""
+    if rcut is None:
+        if h.dimensionality==0: return None # every pair of a finite system
+        rcut = 5.0
+    return float(rcut) + _TOL
+
+
+def pairing_cells(h,rcut):
+    """The cells add_pairing evaluates, the cell 0 first: every cell with
+    a pair of sites within rcut (specialhopping.cells_within), and the
+    cell 0 alone in a finite system"""
+    if h.dimensionality==0: return [(0,0,0)]
+    from ..specialhopping import cells_within
+    return cells_within(h.geometry,rcut)
+
+
+def pairs_within(r1,r2,rcut=None):
+    """The index pairs (i,j) of the sites r1[i] and r2[j] closer than
+    rcut, as two arrays, found with a KD-tree so that the cost is linear
+    in the number of sites. With rcut=None every pair, which is quadratic"""
+    r1,r2 = np.asarray(r1),np.asarray(r2)
+    n1,n2 = len(r1),len(r2) # number of sites
+    if rcut is None: return np.divmod(np.arange(n1*n2),n2) # every pair
+    from scipy.spatial import cKDTree
+    near = cKDTree(r1).query_ball_tree(cKDTree(r2),rcut)
+    ii = np.repeat(np.arange(n1),[len(x) for x in near])
+    jj = np.array([j for x in near for j in sorted(x)],dtype=int)
+    return ii,jj
+
+
+def check_fermi_antisymmetry(h,weightf,tol=1e-6,rcut=None):
     """Raise if a pairing weight breaks Fermi antisymmetry,
     D(r1,r2) = sigma_y D(r2,r1)^T sigma_y, on the pairs of positions that
-    add_pairing evaluates: every pair inside the cell, and every pair
-    between the cell and each of its neighboring replicas. The registered
-    modes obey it by construction, so this is only needed for a callable"""
+    add_pairing evaluates for a callable of range rcut (callable_range):
+    every pair within rcut, inside the cell and between the cell and each
+    cell within rcut. The registered modes obey it by construction, so
+    this is only needed for a callable"""
     sy = np.array([[0.,-1j],[1j,0.]])
-    r = h.geometry.r
-    replicas = [r] # the cell itself first, then its neighbors
-    for d in h.geometry.neighbor_directions():
-        if np.dot(d,d)>1e-4: replicas.append(h.geometry.replicas(d=d))
-    for r2 in replicas:
-        for r1i in r:
-            for r2j in r2:
-                w12 = np.array(weightf(r1i,r2j),dtype=np.complex128)
-                w21 = np.array(weightf(r2j,r1i),dtype=np.complex128)
-                if w12.shape!=(2,2):
-                    raise ValueError("a pairing callable must return the "
-                        "2x2 pairing matrix, and this one returned shape "
-                        +str(w12.shape))
-                dev = np.max(np.abs(w12 - sy@w21.T@sy))
-                if dev>tol:
-                    raise ValueError("the pairing callable breaks Fermi "
-                        "antisymmetry, which needs D(r1,r2) = "
-                        "sigma_y D(r2,r1)^T sigma_y (the singlet part even "
-                        "under r1 <-> r2 and the d-vector odd): at r1="
-                        +str(np.round(r1i,4))+", r2="+str(np.round(r2j,4))
-                        +" the two sides differ by "+str(dev)+". The part "
-                        "that breaks it is not a pairing, it only adds a "
-                        "constant to the many-body Hamiltonian, and yet it "
-                        "shows up in the BdG spectrum")
+    g = h.geometry
+    r = np.array(g.r)
+    rcut = callable_range(h,rcut) # the range add_pairing uses
+    for d in pairing_cells(h,rcut):
+        r2 = r if d==(0,0,0) else g.replicas(d=d)
+        ii,jj = pairs_within(r,r2,rcut)
+        for (i,j) in zip(ii,jj):
+            r1i,r2j = r[i],r2[j]
+            w12 = np.array(weightf(r1i,r2j),dtype=np.complex128)
+            w21 = np.array(weightf(r2j,r1i),dtype=np.complex128)
+            if w12.shape!=(2,2):
+                raise ValueError("a pairing callable must return the "
+                    "2x2 pairing matrix, and this one returned shape "
+                    +str(w12.shape))
+            dev = np.max(np.abs(w12 - sy@w21.T@sy))
+            if dev>tol:
+                raise ValueError("the pairing callable breaks Fermi "
+                    "antisymmetry, which needs D(r1,r2) = "
+                    "sigma_y D(r2,r1)^T sigma_y (the singlet part even "
+                    "under r1 <-> r2 and the d-vector odd): at r1="
+                    +str(np.round(r1i,4))+", r2="+str(np.round(r2j,4))
+                    +" the two sides differ by "+str(dev)+". The part "
+                    "that breaks it is not a pairing, it only adds a "
+                    "constant to the many-body Hamiltonian, and yet it "
+                    "shows up in the BdG spectrum")
 
 
 def check_periodic_pairing(blocks,callables=(),tol=1e-6):

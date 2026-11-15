@@ -319,15 +319,10 @@ def pairing_block(deltas=[[0.,0],[0.,0.]],r1=[],r2=[],rcut=None):
     # c_up d_dn d^\dagger_dn -d^\dagger_up
     # [[delta up dn, delta up up],[delta dn dn, delta dn up]]
     return [[dv[0,0],dv[0,1]],[dv[1,0],dv[1,1]]] # SC matrix
+  from .sctk.pairing import pairs_within
   r1,r2 = np.asarray(r1),np.asarray(r2)
   n1,n2 = len(r1),len(r2) # number of sites
-  if rcut is None: # every pair of sites
-    ii,jj = np.divmod(np.arange(n1*n2),n2)
-  else: # only the pairs within rcut
-    from scipy.spatial import cKDTree
-    near = cKDTree(r1).query_ball_tree(cKDTree(r2),rcut)
-    ii = np.repeat(np.arange(n1),[len(x) for x in near])
-    jj = np.array([j for x in near for j in sorted(x)],dtype=int)
+  ii,jj = pairs_within(r1,r2,rcut) # every pair, or those within rcut
   blocks = np.array([get_pmatrix(r1[i],r2[j]) for (i,j) in zip(ii,jj)],
           dtype=np.complex128).reshape(len(ii),2,2)
   a = np.arange(2)
@@ -375,26 +370,22 @@ def add_pairing_to_hamiltonian(self,**kwargs):
 #    self.get_eh_sector = get_eh_sector_odd_even # assign function
     df = pairing_generator(self,**kwargs) # function that outputs a 2x2 matrix
     if callable(kwargs.get("mode")): # a registered mode obeys it already
-        check_fermi_antisymmetry(self,kwargs["mode"]) # before h is touched
-    r = self.geometry.r # positions 
+        check_fermi_antisymmetry(self,kwargs["mode"],
+                rcut=kwargs.get("rcut")) # before h is touched
+    r = self.geometry.r # positions
     # the electron-hole block towards every neighboring cell, all of them
     # built before h is touched so that a pairing that is not periodic with
-    # the lattice is refused without leaving a half-modified Hamiltonian
-    rcut = getattr(df,"rcut",None) # range of the pairing, if it is known
-    blocks = {(0,0,0): pairing_block(df,r1=r,r2=r,rcut=rcut)} # intra cell
-    if self.dimensionality>0:
-      # a pairing of known range goes to every cell within it, with a
-      # range per direction (cells_within); the box of geometry.ncells=2
-      # cells lost a pairing beyond two cells, as nn=3 on the chain. A
-      # callable has no known range and keeps the box
-      if rcut is None: cells = self.geometry.neighbor_directions()
-      else:
-          from .specialhopping import cells_within
-          cells = cells_within(self.geometry,rcut)
-      for d in cells: # loop over directions
-        d = tuple(int(di) for di in d)
-        if d==(0,0,0): continue # skip onsite
-        r2 = self.geometry.replicas(d=d) # positions
+    # the lattice is refused without leaving a half-modified Hamiltonian.
+    # The pairing goes to every cell within its range, with a range per
+    # direction (cells_within): a registered mode reaches its own shell, a
+    # callable mode rcut (5.0 by default in a periodic system). The box of
+    # geometry.ncells=2 cells lost a pairing beyond two cells, as nn=3 or
+    # a third-neighbor callable on the chain
+    rcut = df.rcut # range of the pairing, None for every pair in 0d
+    from .sctk.pairing import pairing_cells
+    blocks = dict()
+    for d in pairing_cells(self,rcut): # the cell 0 first
+        r2 = r if d==(0,0,0) else self.geometry.replicas(d=d) # positions
         blocks[d] = pairing_block(df,r1=r,r2=r2,rcut=rcut)
     callables = [name for name in ("d","delta","mode")
                    if callable(kwargs.get(name))]
