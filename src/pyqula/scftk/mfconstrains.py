@@ -68,6 +68,20 @@ def remove_inplane_magnetism_spinful(m):
             np.concatenate([z,z]))
 
 
+def remove_net_moment_spinful(m):
+    """Remove the site average of the spin part of the onsite blocks, the
+    uniform exchange field. In the block [[a,c],[c',b]] of an orbital,
+    (a-b)/2 is the exchange field along z and c, c' its in-plane part; the
+    charge (a+b)/2 and every site-resolved part are kept"""
+    up,dn = _spin_indexes(m)
+    a,b = _get_entries(m,up,up),_get_entries(m,dn,dn)
+    c,cp = _get_entries(m,up,dn),_get_entries(m,dn,up)
+    z = np.mean(a-b)/2. # the uniform field along z
+    return _set_entries(m,np.concatenate([up,dn,up,dn]),
+            np.concatenate([up,dn,dn,up]),
+            np.concatenate([a-z,b+z,c-np.mean(c),cp-np.mean(cp)]))
+
+
 def remove_spinless_sector(h,removef,alldirs=True):
     """Remove total charge renormalization.
 
@@ -148,43 +162,63 @@ def remove_inplane_magnetism(h):
 def remove_offplane_magnetism(h):
     return remove_spinful_sector(h,remove_offplane_magnetism_spinful)
 
+def remove_net_moment(h):
+    """The uniform exchange field of the onsite mean field, removed. This
+    is the zero net moment of the ultra long-range method in a form that
+    needs no Lagrange field: it removes the uniform exchange field, not the
+    uniform moment itself, and the two agree for a uniform U and in linear
+    response (future_development/ultra_long_range.md, decision 7). Only
+    the onsite (0,0,0) block, alldirs=False, since a bond carries no
+    moment of a site"""
+    from ..check import require_spin
+    require_spin(h,"the constrain 'no_net_moment'")
+    return remove_spinful_sector(h,remove_net_moment_spinful,alldirs=False)
 
 
+def _no_normal_term(mf,h):
+    if not h.has_eh:
+        raise ValueError("constrain 'no_normal_term' only makes "
+          +"sense for a Hamiltonian with the electron-hole (Nambu) "
+          +"degree of freedom; this one has has_eh=False")
+    from ..sctk.extract import extract_anomalous_dict
+    return extract_anomalous_dict(mf)
 
-known_constrains = ["no_charge","no_magnetism","no_inplane_magnetism",
-        "no_offplane_magnetism","no_normal_term","no_anomalous_term",
-        "no_SC","no_superconductivity"]
+def _no_anomalous_term(mf,h):
+    if not h.has_eh: return mf # no anomalous term to remove in the first place
+    from ..sctk.extract import extract_normal_dict
+    return extract_normal_dict(mf)
+
+
+# the named constrains of constrains=, each a function (mf,h) -> mf
+_CONSTRAINS = {
+        "no_charge": lambda mf,h: remove_charge(h)(mf),
+        "no_magnetism": lambda mf,h: remove_magnetism(h)(mf),
+        "no_inplane_magnetism": lambda mf,h: remove_inplane_magnetism(h)(mf),
+        "no_offplane_magnetism": lambda mf,h: remove_offplane_magnetism(h)(mf),
+        "no_net_moment": lambda mf,h: remove_net_moment(h)(mf),
+        "no_normal_term": _no_normal_term,
+        "no_anomalous_term": _no_anomalous_term,
+        "no_SC": _no_anomalous_term,
+        "no_superconductivity": _no_anomalous_term,
+        }
+
+
+def get_constrain_names():
+    """The names that constrains= accepts, from the registry"""
+    return list(_CONSTRAINS)
+
+
+known_constrains = get_constrain_names()
 
 
 def enforce_constrains(mf,h,constrains=[]):
-    """Given a list of constrains, return a function that enforces
-    all of them in the mean field"""
+    """Enforce every constrain of the list, by name (get_constrain_names()),
+    on the mean field, and return it"""
     for c in constrains:
-        if c=="no_charge":
-            mf = remove_charge(h)(mf) # remove charge renormalization
-        elif c=="no_magnetism":
-            mf = remove_magnetism(h)(mf) # remove magnetism
-        elif c=="no_inplane_magnetism":
-            mf = remove_inplane_magnetism(h)(mf) # remove inplane magnetism
-        elif c=="no_offplane_magnetism":
-            mf = remove_offplane_magnetism(h)(mf) # remove inplane magnetism
-        elif c=="no_normal_term":
-            if h.has_eh:
-                from ..sctk.extract import extract_anomalous_dict
-                mf = extract_anomalous_dict(mf)
-            else:
-                raise ValueError("constrain 'no_normal_term' only makes "
-                  +"sense for a Hamiltonian with the electron-hole (Nambu) "
-                  +"degree of freedom; this one has has_eh=False")
-        elif c in ["no_anomalous_term","no_SC","no_superconductivity"]:
-            if h.has_eh:
-                from ..sctk.extract import extract_normal_dict
-                mf = extract_normal_dict(mf)
-            else: pass # no anomalous term to remove in the first place
-        else:
+        if c not in _CONSTRAINS:
             raise ValueError("unknown mean-field constrain '"+str(c)
-              +"'. Known constrains: "+str(known_constrains))
-#        print(np.round(mf[(0,0,0)],1))
+              +"'. Known constrains: "+str(get_constrain_names()))
+        mf = _CONSTRAINS[c](mf,h)
     return mf
 
 
