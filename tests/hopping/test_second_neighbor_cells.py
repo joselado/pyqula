@@ -31,13 +31,28 @@ def same_spectrum(h1, hs, M, kS=(0.13, 0.37, 0.)):
     return np.max(np.abs(e1 - es))
 
 
+def sheared(h0):
+    """The multicell Hamiltonian h0 written in the cell a1' = a1,
+    a2' = a2 + 6 a1: the sites do not move, and the hopping towards the
+    cell n1 a1 + n2 a2 goes to the cell (n1 - 6 n2, n2), the row n M^-1.
+    This is built by hand, since h.get_supercell(M) looks for the sites
+    only within |det M| cells and does not find them for this M"""
+    hs = h0.copy()
+    g = hs.geometry
+    g.a2 = g.a2 + 6.*g.a1
+    for t in hs.hopping:
+        n1, n2 = int(round(t.dir[0])), int(round(t.dir[1]))
+        t.dir = np.array([n1 - 6*n2, n2, 0])
+    return hs
+
+
 def test_kane_mele_on_a_sheared_cell():
     h0 = geometry.honeycomb_lattice().get_hamiltonian()
     h0.add_sublattice_imbalance(0.2)
     h0.turn_multicell()
     h1 = h0.copy()
     h1.add_kane_mele(0.05) # on the unit cell
-    hs = h0.get_supercell(SHEAR6)
+    hs = sheared(h0) # the same sites, the cell a2 + 6 a1
     hs.add_kane_mele(0.05) # on the sheared cell
     assert same_spectrum(h1, hs, SHEAR6) < 1e-10
 
@@ -48,7 +63,7 @@ def test_haldane_on_a_sheared_cell():
     h0.turn_multicell()
     h1 = h0.copy()
     h1.add_haldane(0.1) # on the unit cell
-    hs = h0.get_supercell(SHEAR6)
+    hs = sheared(h0) # the same sites, the cell a2 + 6 a1
     hs.add_haldane(0.1) # on the sheared cell
     assert same_spectrum(h1, hs, SHEAR6) < 1e-10
 
