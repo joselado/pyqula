@@ -31,7 +31,8 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
     counts = np.sum(valid,axis=1) # kept at each momentum, the first ones
     offsets = np.concatenate([[0],np.cumsum(counts)])
     rows = valid.ravel()
-    H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128)
+    # column order, the one of LAPACK, so that eigh can work on H in place
+    H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128,order="F")
     for g0,g1 in momentum_groups(basis,counts): # consecutive momenta q'
         B = np.hstack([basis.basis_block(kS,U,iq)[:,0:counts[iq]]
             for iq in range(g0,g1)]) # their basis vectors, (norbs,nb)
@@ -39,7 +40,11 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
         Yq = basis.from_supercell(kS,Y) # (N,norb,nb), components at every q
         blocks = np.einsum("qam,qan->qmn",np.conjugate(U),Yq) # U_q^dag Y_q
         H[:,offsets[g0]:offsets[g1]] = blocks.reshape(N*bmax,-1)[rows]
-    return 0.5*(H + np.conjugate(H.T)) # Hermitian up to rounding
+    # Hermitian up to rounding; in place, so that only one more matrix of
+    # this size is alive (the conjugate transpose is built first)
+    H += np.conjugate(H.T)
+    H *= 0.5
+    return H
 
 
 def momentum_groups(basis,counts):
@@ -67,14 +72,16 @@ def eigenstates(basis,hk,kS):
     valid.ravel(), returned with the unit-cell vectors U and the mask
     valid of basis.states, so that phi_q = U_q c_q"""
     E,U,valid = basis.states(kS)
-    es,vs = eigh(ultracell_matrix(basis,hk,kS,E,U,valid))
+    H = ultracell_matrix(basis,hk,kS,E,U,valid)
+    es,vs = eigh(H,overwrite_a=True) # H is not used after, no copy of it
     return es,vs,U,valid
 
 
 def eigenvalues(basis,hk,kS):
     """Eigenvalues of the ultracell at kS, without the eigenvectors"""
     E,U,valid = basis.states(kS)
-    return eigh(ultracell_matrix(basis,hk,kS,E,U,valid),eigvals_only=True)
+    H = ultracell_matrix(basis,hk,kS,E,U,valid)
+    return eigh(H,eigvals_only=True,overwrite_a=True) # no copy of H
 
 
 def real_space_states(basis,kS,vs,U,valid):
