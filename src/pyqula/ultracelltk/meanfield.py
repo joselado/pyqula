@@ -189,8 +189,11 @@ class SparseBackend():
     h by it, so its error is zero, and dm(h) then takes the same states"""
     def __init__(self,nk=1,T=None,filling=None):
         self.nk = nk
-        self.T = 0. if T is None else T # of the Fermi search
-        self.delta = smearing(T) # of the occupations
+        # the occupations and the Fermi search at the same smearing, as
+        # densitymatrix.full_dm_accumulate_sparse_with_fermi does for the
+        # spinful "ed", so that a level at the Fermi energy holds the
+        # charge the filling asks for and not half of the level
+        self.delta = smearing(T)
         self.filling = filling # for shift()
         self.error = 0. # the Fermi level is exact, see shift()
         self.release()
@@ -211,7 +214,8 @@ class SparseBackend():
         and that level; the caller shifts h by it, as for
         densitymatrix.full_dm_accumulate_sparse_with_fermi"""
         states = self.solve(h)
-        fermi = fermi_level(states.eigenvalues(),states.n,filling,T=self.T)
+        fermi = fermi_level(states.eigenvalues(),states.n,filling,
+                T=self.delta)
         states.shift = -fermi # the eigenvalues of the shifted h
         return self.entries(needed),fermi
     def dm(self,h,needed):
@@ -230,7 +234,7 @@ class SparseBackend():
         keeps; the states stay for dm(h)"""
         states = self.solve(h)
         fermi = fermi_level(states.eigenvalues(),states.n,self.filling,
-                T=self.T)
+                T=self.delta)
         states.shift = -fermi # the eigenvalues of the shifted h
         h.fermi = fermi
         h.shift_fermi(-fermi) # the eigenvectors are unaffected

@@ -419,3 +419,30 @@ def test_fixed_chemical_potential_needs_the_states_below_it():
         hl.get_ultracell(hc,emax=0.5).get_mean_field_hamiltonian(V1=1.0,
                 mu=3.0,mf={d: csr_matrix(m) for d,m in mf.items()},nk=2,
                 verbose=0,write=False)
+
+
+def test_degenerate_level_at_the_fermi_energy_is_filled_as_ed():
+    """A spinful chain on a 4-site cell at kS=0 has the levels -2 (two
+    states), 0 (four) and 2 (two). A filling of 3/8 needs one electron in
+    the four states at zero energy. The Fermi search must be at the
+    smearing of the occupations, as the spinful "ed" does: a search at
+    T=0 puts the Fermi level at the level, half of it is then occupied,
+    and the density matrix holds four electrons. With T=None the
+    smearing is delta_dm, and the backend must hold three electrons and
+    give the Fermi level and the density matrix of "ed" at that smearing"""
+    from pyqula.ultracelltk.basis import FoldedBasis
+    from pyqula.ultracelltk.meanfield import SparseBackend
+    from pyqula.densitymatrix import full_dm_accumulate_sparse_with_fermi
+    h = geometry.chain().get_hamiltonian() # spinful
+    hs = h.get_supercell(4)
+    hs.ultracell_basis = FoldedBasis(h,hs)
+    n = hs.intra.shape[0]
+    r,c = np.meshgrid(np.arange(n),np.arange(n),indexing="ij")
+    needed = {(0,0,0): (r.ravel(),c.ravel())}
+    dm,fermi = SparseBackend(nk=1).dm_with_fermi(hs,needed,3./8)
+    m = dm[(0,0,0)].toarray()
+    assert abs(np.trace(m).real-3.)<1e-5 # three electrons, not four
+    h3 = hs.copy() ; h3.turn_dense()
+    ed,fermi3 = full_dm_accumulate_sparse_with_fermi(h3,needed,3./8,nk=1)
+    assert abs(fermi-fermi3)<1e-9
+    assert np.max(np.abs(m-ed[(0,0,0)]))<1e-5
