@@ -91,6 +91,28 @@ def test_chain_and_cubic():
     check(h,[[1,1,0],[0,1,1],[1,0,1]]) # two cells, along face diagonals
 
 
+SHEARED = [[[1,0,0],[2,1,0],[0,0,1]], # a2' = 2a1 + a2, det 1
+        [[1,0,0],[6,1,0],[0,0,1]], # a site in the primitive cell (5,1)
+        [[2,0,0],[5,1,0],[0,0,1]]] # det 2, sites in the cells (4,1), (5,1)
+
+
+@pytest.mark.parametrize("M",SHEARED)
+def test_matrix_with_entries_larger_than_its_determinant(M):
+    """A sheared supercell whose entries are larger than |det M| keeps all
+    its sites: the geometry has |det M| times the sites of the unit cell,
+    one copy of each, and the Hamiltonian has the folded spectrum"""
+    g = geometry.honeycomb_lattice()
+    N = int(round(abs(np.linalg.det(np.array(M,dtype=float)))))
+    gs = g.get_supercell(M)
+    assert len(gs.r)==N*len(g.r)
+    primal = np.array(gs.supercell_primal_index)
+    assert all(np.sum(primal==i)==N for i in range(len(g.r)))
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_haldane(0.1)
+    h.add_sublattice_imbalance(0.3)
+    check(h,M)
+
+
 def test_matrix_a_rounding_error_from_integers():
     """A supercell matrix computed in floating point, with its entries a
     rounding error below the integers (1.9999999999998 for 2), is the
