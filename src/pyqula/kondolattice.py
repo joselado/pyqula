@@ -57,10 +57,14 @@ an unseeded SCF run (the default, mf=None) starts there and stays there
 even for a J that also supports a genuine hybridized state; a seed away
 from zero (mf=(V, lam), see get_mean_field_hamiltonian below) is needed to
 find that other state. Where both coexist, the hybridized state is the
-true (lower-energy) ground state -- see
-tests/kondolattice/test_kondolattice.py::
-test_kondo_branch_has_lower_energy_than_trivial_branch, which also
-exercises return_total_energy=True's Eq. 83 constant terms end to end.
+true ground state, with the lower grand potential at the same chemical
+potential and T -- see tests/kondolattice/test_kondolattice.py::
+test_kondo_branch_has_lower_energy_than_trivial_branch. The energy that
+return_total_energy=True gives is that grand potential per unit cell,
+-T (1/Nk) sum_kn ln(1+exp(-(e_kn-mu)/T)) plus Eq. 83's constants
+sum N|V|^2/J - sum lam Q, so it is stationary in V and lam at the
+converged point and its derivative in mu is minus the electron count
+(tests/kondolattice/test_kondolattice_energy.py).
 
 Only the U(1) (hybridization-only) large-N saddle point is implemented --
 this is the same approximation level Coleman's review presents as the
@@ -137,7 +141,9 @@ class KondoLatticeHamiltonian(Hamiltonian):
     the module docstring for why a nonzero seed is generally needed at
     all). `rcut=`, `nk=`, `mix=`, `maxerror=`, `maxite=`, `T=` are
     forwarded to the SCF loop (scftk.kondolattice.kondo_lattice_mean_field)
-    unchanged.
+    unchanged. With `return_total_energy=True` it also returns the grand
+    potential per unit cell at the fixed chemical potential and at the
+    smearing `T` of the loop (see the module docstring).
 
     The routines below work with any of these couplings, since they take
     the Bloch Hamiltonian of the converged mean field with all its bonds.

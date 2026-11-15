@@ -147,12 +147,12 @@ def test_kondo_branch_has_lower_energy_than_trivial_branch():
     """Above the hybridization threshold, V=0 (unseeded) and a genuine
     Kondo state (seeded) are BOTH self-consistent solutions of Eq. 77 (see
     test_v_zero_is_also_a_fixed_point_at_nonzero_J) -- but only one of them
-    should be the actual ground state. This is also the first real exercise
-    of return_total_energy=True's Eq. 83 constant terms
-    (sum_j N|V_j|^2/J - lam_j*Q) and the mu*n_electrons un-shift: get either
-    sign wrong and this assertion is the one thing here that would catch
-    it (every other test only checks hybridization/local_occupation, never
-    total_energy)."""
+    should be the actual ground state. Both are at the same chemical
+    potential and T, so they compare by the grand potential, which is what
+    return_total_energy=True gives: the band term at T plus Eq. 83's
+    constant terms (sum_j N|V_j|^2/J - lam_j*Q). Get a sign of the
+    constants wrong and this assertion catches it; that the energy is the
+    grand potential is checked in test_kondolattice_energy.py."""
     h = _chain()
     h0, e0 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150,
             mix=0.3, maxerror=1e-6, maxite=1000, return_total_energy=True)

@@ -83,6 +83,17 @@ def hs_constant(V, J):
     return N_SPIN*np.sum(np.abs(V[keep])**2/J[keep])
 
 
+def band_grand_potential(es, T):
+    """Grand potential of free fermions at the temperature T, with the
+    energies es measured from the chemical potential,
+    -T sum_n ln(1 + exp(-e_n/T)). Its derivative in an energy e_n is the
+    Fermi-Dirac occupation of that level, and at T=0 it is the sum of
+    the energies below zero, its limit."""
+    es = np.asarray(es, dtype=np.float64)
+    if T <= 0.0: return np.sum(np.minimum(es, 0.0))
+    return -T*np.sum(np.logaddexp(0.0, -es/T))
+
+
 def onsite_bonds(pairs, J):
     """The bonds (c, m, R, J_b) of the onsite model: the moment m of every
     Kondo pair coupled with J to the conduction electron of its own site"""
@@ -196,7 +207,9 @@ def kondo_bonds(h0, pairs, J, rcut=None):
 
 class KondoLatticeSCF():
     """Result of kondo_lattice_mean_field: .hamiltonian, .converged,
-    .total_energy, .hybridization (V_b, one per bond of .kondo_bonds),
+    .total_energy (the grand potential per unit cell at the fixed mu and
+    at the smearing T, see _pack), .hybridization (V_b, one per bond of
+    .kondo_bonds),
     .kondo_bonds (the bonds (c, m, R, J_b)), .local_occupation (<n_f,j>,
     one per f-site), .constraint_lambda (lam_j, one per f-site)."""
     pass
@@ -235,9 +248,11 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
         as V,lam converge, not be re-pinned to its bare-band value every
         iteration -- re-solving mu each step fights this expansion and
         produces a marginally-stable, weakly-damped oscillation in the
-        coupled (V, lam, mu) system instead of converging). The actual
-        converged electron count (generally not exactly `filling` any
-        more) is what determines the total energy's un-shift, see _pack.
+        coupled (V, lam, mu) system instead of converging). The converged
+        electron count is generally not exactly `filling` any more, and
+        the total energy is the grand potential at this mu and at the
+        smearing T (see _pack), so two solutions at the same mu, for
+        instance V=0 and a hybridized one, compare by it directly.
 
         Note that the bare (V=0) f-sector is a perfectly flat,
         macroscopically degenerate band at energy lam -- a filling target
@@ -330,7 +345,7 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
         A = np.array([dms[_minus(Rb[b])][2*cb[b], 2*fb[b]]
                 + dms[_minus(Rb[b])][2*cb[b]+1, 2*fb[b]+1]
                 for b in range(len(bonds))], dtype=np.complex128)
-        return h, dm, A, nfocc
+        return h, A, nfocc
 
     def residual(V, A, nfocc):
         # V's residual is RELATIVE (to max(|V|,|target|), not an absolute
@@ -364,57 +379,63 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
             v_resid = np.max(np.abs(target - V))/vscale
         return max(v_resid, np.max(np.abs(nfocc - Q)))
 
-    def pack(h, dm, V, lam, nfocc, converged):
-        scf = _pack(h, dm, V, lam, nfocc, 2.0*Jg, Q, nk, converged)
+    def pack(h, V, lam, nfocc, converged):
+        scf = _pack(h, V, lam, nfocc, 2.0*Jg, Q, nk, T, converged)
         scf.kondo_bonds = list(bonds)
         return scf
 
     ite = 0
     while True:
-        h, dm, A, nfocc = evaluate(V, lam)
+        h, A, nfocc = evaluate(V, lam)
         diff = residual(V, A, nfocc)
         Vnew = (1 - mix)*V + mix*(-Jg*A)
         lamnew = lam + 4*mix*T*(nfocc - Q) # see T's docstring above
         if diff < maxerror:
             V, lam = Vnew, lamnew
-            h, dm, A, nfocc = evaluate(V, lam)
+            h, A, nfocc = evaluate(V, lam)
             err = residual(V, A, nfocc)
-            scf = pack(h, dm, V, lam, nfocc, err < maxerror)
+            scf = pack(h, V, lam, nfocc, err < maxerror)
             scf.iterations, scf.residual, scf.tol = ite, err, maxerror
             return scf
         V, lam = Vnew, lamnew
         if maxite is not None and ite >= maxite:
-            scf = pack(h, dm, V, lam, nfocc, False)
+            scf = pack(h, V, lam, nfocc, False)
             scf.iterations, scf.residual, scf.tol = ite, diff, maxerror
             return scf
         ite += 1
 
 
-def _pack(h, dm, V, lam, nfocc, J, Q, nk, converged):
+def _pack(h, V, lam, nfocc, J, Q, nk, T, converged):
     scf = KondoLatticeSCF()
     scf.hamiltonian = h
     scf.converged = converged
     scf.hybridization = V
     scf.local_occupation = nfocc
     scf.constraint_lambda = lam
-    # Eq. 83's constant terms (N*V-bar*V/J from the Hubbard-Stratonovich
-    # transform, Eq. 78 -- see hs_constant for why the N is there, and for
-    # the stationarity it is fixed by -- minus lam*Q from expanding
-    # lam*(n_f-Q), Eq. 81),
-    # which the one-body matrix above does not contain (they multiply the
-    # identity, not any operator) but which the free energy needs -- see
-    # this module's docstring. No further double-counting correction is
-    # needed beyond this: unlike a generic V/U density-density interaction,
-    # the Coqblin-Schrieffer coupling here only ever enters through this one
-    # Hubbard-Stratonovich channel.
+    # The total energy is the grand potential per unit cell at the fixed
+    # mu and at the smearing T of the loop,
     #
-    # mu is now held fixed through the SCF loop (see kondo_lattice_mean_
-    # field's docstring), so the converged electron count is NOT
-    # n_orbitals*filling any more (that was only the bare-band count used
-    # to pick mu in the first place) -- un-shift using the actual electron
-    # count read off the converged (intracell) density matrix instead.
-    n_electrons = np.trace(dm).real
-    etot = h.get_total_energy(nk=nk) + h.fermi*n_electrons
+    #   Omega = -T (1/Nk) sum_kn ln(1 + exp(-(e_kn - mu)/T))
+    #           + sum_b N|V_b|^2/J_b - sum_j lam_j Q ,
+    #
+    # with e_kn the bands of the mean-field Hamiltonian (h is already
+    # shifted by -mu). The loop occupies the states with the Fermi-Dirac
+    # weight at T, and the derivative of the band term in V_b is that
+    # same weighted <dH/dV_b>, so Omega is stationary in every V_b at the
+    # fixed point, and in lam_j once n_f = Q. As a result its derivative
+    # in mu along the converged solutions is minus the electron count,
+    # and two solutions at the same mu and T compare by it. The constants
+    # are those of Eq. 83: N|V|^2/J from the Hubbard-Stratonovich
+    # transform, Eq. 78 (see hs_constant for why the N is there), and
+    # -lam Q from lam (n_f - Q), Eq. 81. They multiply the identity, so
+    # the one-body matrix does not contain them. No other double-counting
+    # term is needed: unlike a generic V/U density-density interaction,
+    # the Coqblin-Schrieffer coupling only enters through this one
+    # Hubbard-Stratonovich channel.
+    from ..htk.eigenvectors import peigvalsh_bloch
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # the mesh of the loop
+    es = peigvalsh_bloch(h.get_hk_gen(), ks) # bands measured from mu
+    etot = band_grand_potential(es, T)/len(ks)
     etot += hs_constant(V, J) - np.sum(lam)*Q
-    scf.total_energy = etot.real if hasattr(etot, "real") else etot
+    scf.total_energy = float(etot)
     return scf
