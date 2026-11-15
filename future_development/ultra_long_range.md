@@ -250,7 +250,11 @@ two-cell cubic supercell.
 
 The maintainer decided on 15 November 2026 to add `window=(emin,emax)` and a Nambu mean field
 with the cut $|E|\le E_\mathrm{max}$ (decisions 2 and 6). A Fable agent designed both from the
-code and from the TeX source of arXiv:2008.12573; nothing below is built yet. The two are one
+code and from the TeX source of arXiv:2008.12573, and both were built the same day (ebaa136,
+f58bd25, b7572fa, f3e0c08), with the tests of `tests/ultracell/test_ultracell_window.py` and
+`test_ultracell_nambu.py`. A reviewer found one crash, a Nambu cut below the quasiparticle gap,
+repaired in f3e0c08; still not built: a shell filling for a gapless paired state, and the
+Hellmann-Feynman test of the design. The two are one
 mechanism: each folded momentum gets an index range $[i_0,i_1)$ of its sorted levels, frozen
 below $i_0$, kept in between, dropped above. The Nambu cut is the window $(-E_\mathrm{max},
 E_\mathrm{max})$ on the BdG levels, and its deep states are the frozen density in the Nambu

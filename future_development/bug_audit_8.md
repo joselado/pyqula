@@ -123,3 +123,52 @@ a timing before anything changes.
   Chebyshev series, so that any frequency works.
 - Every other finding of this record is repaired with a test, bugs first, then the
   optimizations with a timing each.
+
+Taken the same day, on questions the repairs raised:
+
+- The optimization of the Kondo loop that reads only the needed density-matrix entries stays
+  out: it also dropped the GPU density matrix and the biorthogonal path of a non-Hermitian loop,
+  and it is not timed. It can come back with a timing and with both paths kept.
+- A Kondo field converges relative to its own size, with a floor of `maxerror/10` times the
+  largest field, so that a field zero by symmetry converges.
+- The KPM-only keywords raise a TypeError also with `use_jax=True`, one rule for every engine.
+- The Kane-Mele orientation averaged over the paths is kept on the pyrochlore lattice, where the
+  two faces of a tetrahedron give the symmetric form $\mathbf b_{ij}\times\mathbf d_{ij}$;
+  `examples/2d/pyrochlore_film` changes with it.
+- `lg.get_local_mu()` is the energy cost of adding a particle on a site,
+  $\mu_i+J_{ii}+2\sum_{k\neq i}J_{ik}n_k$, the same as the Monte Carlo moves.
+- The default first-neighbor Hamiltonian in 1D and 2D is built as multicell when a first
+  neighbor lies outside the 9 cells of the single-cell storage, so a strongly sheared cell
+  gets every neighbor; a reduced cell keeps the single-cell storage.
+
+## What was repaired, 15 November 2026
+
+Every finding above was repaired the same day, by seven agents that read and wrote without
+running and one more for the ultracell window, each change run afterwards, the whole suite
+included. By area:
+
+- Supercells: the search box from the entries of $M$, the rounding of a float matrix on the
+  geometry path, the $d\times d$ matrix and the refusal of `ncut=` (f925087 to a055e41).
+- Classical couplings: the local energy of a self-image pair, the check of a generator, the
+  self pair dropped, the shells of `shell_interaction`, the range of a generator, an exact-zero
+  threshold for a cell of a parametric hopping, and the local chemical potential (164d4f6 to
+  5a7b28a, 9583aab).
+- Mean-field engines: the KPM keywords refused as a TypeError (7fad411, cc22940), a dense
+  starting mean field made csr in both sparse loops, `no_net_moment`, and `np.kron` in
+  VJinteraction (c4869af to 0e813ae).
+- Fixed box and dead code: the Coulomb interactions and `add_kane_mele_old` removed, Kane-Mele
+  and Haldane on one path for every storage with the orientation averaged over the paths, a
+  callable pairing with `rcut`, and `hopping2deltaud` from `np.nonzero` (3ed5639 to 09e9898).
+- Ultracell: zero states at an empty kS, the guards of a fixed mu and of `get_vev`, the Fermi
+  search at the smearing of the occupations, the default broadening, and four optimizations
+  (2fd0a36 to 9065a84).
+- Kondo lattice: T and the k-mesh stored, the grand potential, and the residual of each field
+  with the floor of `maxerror/10` (9ea72f9, 25a72ef, 4b337af, 03100d7). The optimization of the
+  density-matrix entries stays out, as decided.
+- Response: keyword-only `optical_conductivity`, `np.kron` in the BSE interaction, the KPM total
+  energy at `fermi`, the memory budget of the single-shot resolvent, the full filling at finite
+  T, and the T=0 box integrated in closed form (e700adf to 7934143).
+- The default first-neighbor hopping of a sheared cell (932bafe), and the guide and records
+  (339b907).
+
+The whole suite on 7934143 gave 4261 passed and the 4 thread-count failures of a two-thread cap.
