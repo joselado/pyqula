@@ -1193,16 +1193,10 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     U = obj2geometryarray(U,h.geometry) # convert to array
     reject_spinless_U(h,U)
     if h.has_spin: #raise # not implemented
-        for d in v: # loop
-            m = v[d] ; n = m.shape[0]
-            m1 = np.zeros((2*n,2*n),dtype=np.complex128)
-            for i in range(n):
-              for j in range(n): 
-                  m1[2*i,2*j] = m[i,j]
-                  m1[2*i+1,2*j] = m[i,j]
-                  m1[2*i,2*j+1] = m[i,j]
-                  m1[2*i+1,2*j+1] = m[i,j]
-            v[d] = m1 # store
+        for d in v: # the same coupling between every spin of the two sites
+            n = v[d].shape[0]
+            v[d] = np.kron(np.asarray(v[d],dtype=np.complex128),
+                    np.ones((2,2)))
         for i in range(n):
             v[(0,0,0)][2*i,2*i+1] += U[i]/2. # add
             v[(0,0,0)][2*i+1,2*i] += U[i]/2. # add

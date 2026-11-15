@@ -88,8 +88,25 @@ staggered field mixes the two bands of graphene at every momentum, and the cut r
 part of the upper one. The whole rebuilt runs took 1.3 to 3.7 times longer than the clean
 ones (7.0 s against 1.9 s at `emax=0.5`, 6.9 s against 5.5 s at 2.0), but the two
 converged to different states in different numbers of iterations, so the cost per
-iteration was not measured; the extra work is the $N$ projections of the orbital Bloch
+iteration was not measured; the extra work was the $N$ projections of the orbital Bloch
 sums, in a Python loop.
+
+That loop is gone since 15 November 2026. The block of a folded momentum on itself, in
+the orbital Bloch basis, is the Bloch Hamiltonian at $\mathbf p_{\mathbf q}$ of the
+hoppings of the supercell averaged over its cells, the same for every $\mathbf k_S$. So
+the rebuilt basis is the clean basis of that averaged unit cell, built once per
+Hamiltonian, and it agrees with the projection to $5\times10^{-15}$ with modulated
+hoppings, Rashba coupling and an exchange field. Two other costs went the same night.
+The Fermi search and the density matrix diagonalized the ultracell twice per kpoint, and
+the tail of the loop twice more; a uniform shift leaves the eigenvectors as they are, so
+the search keeps its states and the rest takes them. And the density matrix sums each
+pair once per kpoint for all directions, since only the Bloch phase depends on the
+direction. On spinful graphene, $24\times24$ cells, 2304 orbitals, `emax=1.0` keeping
+1440 states, `nk=1`, one call of the loop went from 30 s to 15 s, of which one `eigh` of
+the ultracell is 4.7 s; on a $12\times1$ ultracell, fifteen iterations went from 2.5 s
+to 1.0 s. What is left is the dense loop of `scftk`: the same call peaks at 3.4 GB,
+against 0.7 GB for the ultracell itself, so a supercell of about 4000 orbitals no longer
+fits in 6 GB, while its ultracell would still be a minute per iteration.
 
 `tests/ultracell/test_ultracell_meanfield.py` (6 tests) pins: the Hubbard antiferromagnet
 of a $3\times2$ cell with every state against `integration="ed"` from the same guess, energy
