@@ -1142,14 +1142,23 @@ def get_integration_names():
     return kubo.get_integration_names()+kpmkubo.get_integration_names()
 
 
-def optical_conductivity(h,*args,integration="grid",**kwargs):
+def optical_conductivity(h,energies=None,*args,integration="grid",**kwargs):
+    # the band path and the KPM path have different arguments from the
+    # third one on (intraband in one, component in the other), so a
+    # positional argument after energies would mean a different thing in
+    # each; everything after energies is a keyword
+    if args: raise TypeError("optical_conductivity takes h and energies as "
+            "positional arguments and everything else as keywords (nk=, T=, "
+            "delta=, component=...), because the band and the KPM "
+            "integrations order their arguments differently; got "
+            +str(len(args))+" more positional argument(s)")
     if integration not in get_integration_names():
         raise ValueError("unknown integration "+repr(integration)+" for the "
                 "optical conductivity, accepted values are "
                 +", ".join(get_integration_names()))
     if integration in kpmkubo.get_integration_names():
-        return kpmkubo.optical_conductivity(h,*args,**kwargs)
-    return _optical_conductivity_bands(h,*args,integration=integration,
-            **kwargs)
+        return kpmkubo.optical_conductivity(h,energies=energies,**kwargs)
+    return _optical_conductivity_bands(h,energies=energies,
+            integration=integration,**kwargs)
 optical_conductivity.__doc__ = _optical_conductivity_bands.__doc__ + \
         kpmkubo.optical_conductivity.__doc__

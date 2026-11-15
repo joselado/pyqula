@@ -278,3 +278,23 @@ def test_spinful_multicell_hamiltonian():
     (w,s1) = h1.get_optical_conductivity(**kw)
     assert np.max(np.abs(s0))>1e-3
     assert np.allclose(s1,2.*s0,atol=1e-10)
+
+
+@pytest.mark.parametrize("integration", ["grid", "kpm"])
+def test_arguments_after_the_energies_are_keywords(integration):
+    """The band path and the KPM path order their arguments differently
+    from the third one on (intraband in one, component in the other), so
+    the same positional call would mean two different things. Everything
+    after the energies is a keyword, and a positional call raises before
+    any computation, while the energies themselves stay positional"""
+    h = _chain()
+    with pytest.raises(TypeError, match="keywords"):
+        conductivity.optical_conductivity(h, [0.5], 4, 0.05, 0.1, False,
+                integration=integration)
+    with pytest.raises(TypeError, match="keywords"):
+        conductivity.optical_conductivity(h, [0.5], 4,
+                integration=integration)
+    (w, s) = conductivity.optical_conductivity(h, [0.5], nk=8, T=0.1,
+            delta=0.1, component="xx", integration=integration,
+            **({} if integration == "grid" else dict(trace="exact")))
+    assert np.allclose(w, [0.5])
