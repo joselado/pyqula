@@ -377,3 +377,45 @@ def test_kpoint_without_kept_states_in_the_mean_field(rebuild):
     # a kpoint without states in the T=0 cut of the Fermi level
     es = [np.array([-1.,0.]),np.zeros(0)]
     assert abs(fermi_level(es,3,1./6)+0.5)<1e-12
+
+
+def test_fixed_chemical_potential_needs_the_states_below_it():
+    """With a cut at emax=0.5 the states of graphene between 0.5 and mu
+    are not in the basis. A fixed mu above every kept state would leave
+    them out of the density matrix, the mean field and the band energy
+    without a message, while a filling that needs them raises. The fixed
+    mu must raise the same way, and a mu below the highest kept state
+    must not"""
+    from pyqula.scftk import sparsemeanfield
+    from pyqula.ultracelltk.basis import FoldedBasis
+    from pyqula.ultracelltk.meanfield import SparseBackend
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    hs = h.get_supercell([3,2])
+    hs.ultracell_basis = FoldedBasis(h,hs,emax=0.5)
+    n = hs.intra.shape[0]
+    v = sparsemeanfield.interaction(hs,U=np.ones(len(hs.geometry.r)))
+    needed = sparsemeanfield.needed_entries([v],n)
+    for mu,raises in [(1.0,True),(-2.0,False)]:
+        h2 = hs.copy() ; h2.shift_fermi(-mu)
+        b = SparseBackend(nk=2,T=1e-7)
+        if raises:
+            with pytest.raises(ValueError,match="chemical potential"):
+                b.dm(h2,needed)
+        else: b.dm(h2,needed)
+    # the loops, spinful and spinless, with mu far above the kept states
+    u = h.get_ultracell(hs,emax=0.5)
+    with pytest.raises(ValueError,match="chemical potential"):
+        u.get_mean_field_hamiltonian(U=1.0,mu=3.0,mf="antiferro",nk=2,
+                verbose=0,write=False)
+    from scipy.sparse import csr_matrix
+    from pyqula.scftk.densitydensity import random_hermitian_guess
+    hl = geometry.chain().get_hamiltonian(has_spin=False)
+    hc = hl.get_supercell(6)
+    np.random.seed(7)
+    mf = random_hermitian_guess({(0,0,0):0,(1,0,0):0,(-1,0,0):0},
+            hc.intra.shape,scale=0.3)
+    with pytest.raises(ValueError,match="chemical potential"):
+        hl.get_ultracell(hc,emax=0.5).get_mean_field_hamiltonian(V1=1.0,
+                mu=3.0,mf={d: csr_matrix(m) for d,m in mf.items()},nk=2,
+                verbose=0,write=False)

@@ -216,8 +216,14 @@ class SparseBackend():
         return self.entries(needed),fermi
     def dm(self,h,needed):
         """The density matrix of h, already shifted by its chemical
-        potential, from the states of shift() if they were those of h"""
-        if h is not self.h: self.solve(h)
+        potential, from the states of shift() if they were those of h.
+        Otherwise the caller shifted h by a fixed mu, which with a cut
+        must lie below the highest kept state, as fermi_level requires
+        of a filling"""
+        if h is not self.h: # a fixed chemical potential, at zero energy
+            states = self.solve(h)
+            require_kept_above(states.eigenvalues(),states.n,self.delta,
+                    states.basis.emax,"the chemical potential")
         return self.entries(needed)
     def shift(self,h):
         """h shifted by its Fermi level at self.filling, which h.fermi
@@ -237,6 +243,28 @@ class SparseBackend():
         "ed"; from the states of the last density matrix if it was of h"""
         states = self.states if h is self.h else MeshStates(h,nk=self.nk)
         return np.mean([np.sum(e[e<0.]) for e in states.eigenvalues()])
+
+
+def require_kept_above(esk,n,delta,emax,what):
+    """With a cut, the Fermi level must lie below the highest kept state,
+    as fermi_level requires of a filling: the states above emax are not
+    in the basis and count as empty, and when every kept state is full
+    the states cut away can lie below the Fermi level too. esk are the
+    ultracell eigenvalues per kpoint, measured from the Fermi level, of a
+    supercell with n states per kpoint, occupied with the smearing delta;
+    a state is full empty_ratio smearings below the Fermi level. The
+    count is over the whole mesh, as in fermi_level, since a kpoint can
+    keep no state at all"""
+    kept = sum(len(e) for e in esk)
+    if kept==n*len(esk): return # every state kept, nothing cut away
+    tops = [np.max(e) for e in esk if len(e)>0]
+    if len(tops)>0 and max(tops)>-empty_ratio*delta: return
+    where = "" if len(tops)==0 else (" (the highest is "
+            +str(-max(tops))+" below it)")
+    raise ValueError(what+" is above every state the ultracell keeps on "
+            "this mesh"+where+", so the states that emax="+str(emax)
+            +" cuts away can lie below it and be occupied; build the "
+            "ultracell with a larger emax")
 
 
 def fermi_level(esk,n,filling,T=0.):
