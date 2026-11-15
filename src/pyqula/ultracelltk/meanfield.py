@@ -89,7 +89,10 @@ class MeshStates():
         for k in self.ks:
             E,U,valid = self.basis.states(k)
             H = ultracell_matrix(self.basis,hkgen(k),k,E,U,valid)
-            es,vs = eigh(H)
+            # H is in column order and not used after, so eigh works on
+            # it in place instead of on a copy
+            es,vs = eigh(H,overwrite_a=True)
+            del H
             self.es.append(es) ; self.vs.append(vs)
             self.Us.append(U) ; self.valid.append(valid)
         self.shift = 0. # added to every eigenvalue, see shifted()
