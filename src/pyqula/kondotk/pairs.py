@@ -68,15 +68,18 @@ def pair_hybridization(h, pairs):
             for (ci, fi) in pairs])
 
 
-def onsite_coupling(J, h, pairs):
-    """The Kondo coupling of the onsite bond of every pair, from the J= of
-    a routine: a number, or a function J(rc, rm) of the position of the
-    conduction site and of the site that holds the moment, the one given
-    to the self-consistent loop, evaluated at rc = rm."""
-    if not callable(J): return np.full(len(pairs), float(J))
+def onsite_coupling(J, h, pairs, sites=None):
+    """The Kondo coupling of the onsite bond of the pairs `sites` (indices
+    into pairs, every pair by default), from the J= of a routine: a number,
+    or a function J(rc, rm) of the position of the conduction site and of
+    the site that holds the moment, the one given to the self-consistent
+    loop, evaluated at rc = rm."""
+    sites = list(range(len(pairs))) if sites is None else list(sites)
+    if not callable(J): return np.full(len(sites), float(J))
     r = np.array(h.geometry.r)
     out = []
-    for m, (ci, fi) in enumerate(pairs):
+    for m in sites:
+        ci = pairs[m][0]
         Jm = J(r[ci], r[ci])
         if not np.isfinite(Jm) or np.imag(Jm) != 0.0:
             raise ValueError("the Kondo coupling J(rc, rm) must be a real "
@@ -85,17 +88,18 @@ def onsite_coupling(J, h, pairs):
     return np.array(out)
 
 
-def require_onsite_coupling(Jm, what):
+def require_onsite_coupling(Jm, what, sites=None):
     """Raise if a moment has no onsite coupling, for an amplitude that is
-    divided by it"""
+    divided by it. Jm is the coupling of the pairs `sites`, as given to
+    onsite_coupling, so that the message names the moment itself"""
     bad = np.nonzero(Jm == 0.0)[0]
     if len(bad) > 0:
+        m = int(bad[0]) if sites is None else int(list(sites)[bad[0]])
         raise ValueError(what+" with J= needs the onsite Kondo coupling of "
                 "the moment, J(rm, rm), and it is J=0 at the moment %d; the "
                 "amplitude 4V/(3J) of the composite fermion of a site is "
                 "fixed by its onsite bond, so with a coupling to other "
-                "sites only pass J=None for an amplitude of 1"
-                % int(bad[0]))
+                "sites only pass J=None for an amplitude of 1" % m)
 
 
 def scale_hybridization(h, scale, pairs):

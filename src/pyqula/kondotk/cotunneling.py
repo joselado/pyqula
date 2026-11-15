@@ -75,8 +75,8 @@ def _tf_per_site(tf, J, h, sites):
                 "pass the Coqblin-Schrieffer coupling used in the "
                 "self-consistent loop")
     pairs = pairstk.get_pairs(h, "the cotunneling dI/dV")
-    Jm = pairstk.onsite_coupling(J, h, pairs)[sites]
-    pairstk.require_onsite_coupling(Jm, "the cotunneling dI/dV")
+    Jm = pairstk.onsite_coupling(J, h, pairs, sites)
+    pairstk.require_onsite_coupling(Jm, "the cotunneling dI/dV", sites)
     V = pairstk.pair_hybridization(h, pairs)[sites]
     return 2.*tfs*np.conjugate(V)/Jm
 

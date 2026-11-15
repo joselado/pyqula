@@ -352,6 +352,38 @@ def test_amplitudes_take_the_onsite_bond(asym):
         h1.get_cotunneling_didv(J=displaced((1, 0, 0)), nk=4)
 
 
+def test_amplitudes_need_the_onsite_bond_of_the_selected_moment_only():
+    """A cell of two moments and a function J that is J0 at the onsite bond
+    of the first moment and zero at the second one. For the first moment
+    the composite fermion and the cotunneling spectrum must be those of
+    the number J0, since only its own onsite bond enters, and the second
+    moment must not stop them. Asking for the second moment must name it,
+    moment 1, and not its place in the list of the selected pairs"""
+    h2, e2 = converge(chain_kondo(2), J0, nk=30)
+    pairs = h2._kondo_pairs
+    r0 = np.array(h2.geometry.r[pairs[0][0]]) # where the first moment sits
+    def J(rc, rm): # onsite J0 at the first moment only
+        if np.linalg.norm(rc - rm) < 1e-6 and np.linalg.norm(rm - r0) < 1e-6:
+            return J0
+        return 0.0
+    kw = dict(kpath=[[0.13, 0., 0.]], energies=np.linspace(-3., 3., 61),
+            delta=0.05, site=0)
+    k, e, a0 = h2.get_composite_spectral_function(J=J0, **kw)
+    k, e, a1 = h2.get_composite_spectral_function(J=J, **kw)
+    assert np.max(np.abs(a0["FF"])) > 1e-2 # not vacuous
+    for key in ("cc", "FF", "cF", "gF"):
+        assert np.max(np.abs(a1[key] - a0[key])) < 1e-12, key
+    e, d0 = h2.get_cotunneling_didv(J=J0, site=0, nk=4)
+    e, d1 = h2.get_cotunneling_didv(J=J, site=0, nk=4)
+    assert np.max(np.abs(d0)) > 1e-2 # not vacuous
+    assert np.max(np.abs(d1 - d0)) < 1e-12
+    for f in (h2.get_composite_spectral_function, h2.get_cotunneling_didv):
+        with pytest.raises(ValueError, match="at the moment 1"):
+            f(J=J, site=1, nk=4)
+        with pytest.raises(ValueError, match="at the moment 1"):
+            f(J=J, site=[1], nk=4)
+
+
 def test_bad_inputs_say_what_is_wrong():
     h = chain_kondo()
     with pytest.raises(ValueError, match="rcut"):

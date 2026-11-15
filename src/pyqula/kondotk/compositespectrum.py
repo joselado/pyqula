@@ -82,24 +82,28 @@ from .. import algebra
 from . import pairs as pairstk
 
 
-def composite_amplitude(h, pairs, J):
+def composite_amplitude(h, pairs, J, sites=None):
     """Amplitude z_j of the f fermion in the composite fermion F_j = z_j f_j
-    of every Kondo pair: 1 with J=None, and 4 conj(V_j)/(3J_j) with J_j
-    the Coqblin-Schrieffer coupling of the onsite bond of the moment and
-    V_j its hybridization, the one that h holds. J is a number, or the
-    function J(rc, rm) of the self-consistent loop, read at rc = rm. The
-    composite fermion is the one of the site, (2/3)(sigma.S_j)c_j, so only
-    the onsite bond enters even when the moment is coupled to other sites
-    too, and a moment without an onsite coupling has no amplitude here."""
-    if J is None: return np.ones(len(pairs), dtype=np.complex128)
-    Jm = pairstk.onsite_coupling(J, h, pairs)
+    of the Kondo pairs `sites` (indices into pairs, every pair by default):
+    1 with J=None, and 4 conj(V_j)/(3J_j) with J_j the Coqblin-Schrieffer
+    coupling of the onsite bond of the moment and V_j its hybridization,
+    the one that h holds. J is a number, or the function J(rc, rm) of the
+    self-consistent loop, read at rc = rm. The composite fermion is the one
+    of the site, (2/3)(sigma.S_j)c_j, so only the onsite bond enters even
+    when the moment is coupled to other sites too, and a moment without an
+    onsite coupling has no amplitude here (the other moments of the cell
+    do not need one)."""
+    sites = list(range(len(pairs))) if sites is None else list(sites)
+    if J is None: return np.ones(len(sites), dtype=np.complex128)
     if not callable(J) and J == 0.0:
         raise ValueError("J=0 makes the amplitude 4V/(3J) of the composite "
                 "fermion undefined; pass the Coqblin-Schrieffer coupling "
                 "used in the self-consistent loop, or J=None for an "
                 "amplitude of 1")
-    pairstk.require_onsite_coupling(Jm, "the composite fermion")
-    return 4.*np.conjugate(pairstk.pair_hybridization(h, pairs))/(3.*Jm)
+    Jm = pairstk.onsite_coupling(J, h, pairs, sites)
+    pairstk.require_onsite_coupling(Jm, "the composite fermion", sites)
+    V = pairstk.pair_hybridization(h, pairs)[sites]
+    return 4.*np.conjugate(V)/(3.*Jm)
 
 
 def _default_energies(es, delta, ne, emax):
@@ -168,7 +172,7 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
         raise ValueError("delta must be positive, the broadening of the "
                 "levels; got "+str(delta))
     h = pairstk.scale_hybridization(h, hybridization_scale, pairs)
-    z = composite_amplitude(h, pairs, J)[sites]
+    z = composite_amplitude(h, pairs, J, sites)
     ci = np.array([pairs[s][0] for s in sites])
     fi = np.array([pairs[s][1] for s in sites])
     # spin orbitals of every f site of the cell, and where the selected
