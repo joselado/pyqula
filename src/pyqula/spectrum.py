@@ -336,7 +336,8 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
     """Compute energy in this kpoint"""
     hk = f(k)  # kdependent hamiltonian
     if use_kpm: # Kernel polynomial method
-      return eh_energy(kpm.total_energy(hk,scale=10.,ntries=20,npol=100),hk) # using KPM
+      return eh_energy(kpm.total_energy(hk,scale=10.,ntries=20,npol=100,
+          fermi=fermi),hk) # the states below fermi, as the diagonalization
     else: # conventional diagonalization
       if nbands is None: vv = algebra.eigvalsh(hk) # diagonalize k hamiltonian
       else: 

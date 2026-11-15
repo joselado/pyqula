@@ -240,12 +240,13 @@ def pdos(m,P=None,**kwargs):
 tdos0d = tdos # redefine
 
 
-def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20):
-   """Sum of the eigenvalues of m_in below zero, the chemical potential,
-   from the KPM density of states. tdos gives the density per state, so
-   its integral is multiplied by the dimension of m_in"""
+def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20,fermi=0.):
+   """Sum of the eigenvalues of m_in below fermi, the chemical potential
+   (zero by default), from the KPM density of states. tdos gives the
+   density per state, so its integral is multiplied by the dimension of
+   m_in"""
    x,y = tdos0d(m_in,scale=scale,npol=npol,ne=ne,ntries=ntries)
-   z = np.where(x<0.,x,0.)*y # occupied states only
+   z = np.where(x<fermi,x,0.)*y # occupied states only
    return m_in.shape[0]*np.trapezoid(z,x)
 
 
