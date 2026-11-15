@@ -312,3 +312,39 @@ def test_nondiagonal_mean_field_every_state():
             integration="ed",mf=mf,**kw)
     assert abs(e2-e3)<1e-8
     assert same_state(u2,h3)<1e-7
+
+
+@pytest.mark.parametrize("spin",[True,False])
+def test_fixed_chemical_potential_every_state_is_the_supercell(spin):
+    """With mu= instead of a filling the loop shifts the Hamiltonian by mu
+    and solves it, and the energy has no Fermi term; with every state kept
+    it must give the mean field and the energy of "ed" on the supercell,
+    spinful (the sparse engine of the exchange) and spinless (the sparse
+    density-density loop)"""
+    from scipy.sparse import csr_matrix
+    from pyqula.scftk.densitydensity import random_hermitian_guess
+    if spin:
+        g = geometry.honeycomb_lattice()
+        h = g.get_hamiltonian()
+        hs = h.get_supercell([3,2])
+        kw = dict(U=2.5,J1=0.3,mu=0.2,mf="antiferro")
+    else:
+        g = geometry.chain()
+        h = g.get_hamiltonian(has_spin=False)
+        hs = h.get_supercell(6)
+        np.random.seed(7)
+        mf = random_hermitian_guess({(0,0,0):0,(1,0,0):0,(-1,0,0):0},
+                hs.intra.shape,scale=0.3)
+        kw = dict(V1=1.5,mu=0.1,mf=mf)
+    x = fractional(hs.geometry)
+    hs.add_onsite(lambda r: 0.2*np.cos(2*np.pi*x(r)[0]))
+    kw.update(nk=3,maxerror=1e-11,verbose=0,write=False)
+    kw2 = dict(kw)
+    if not spin: kw2["mf"] = {d: csr_matrix(m) for d,m in kw["mf"].items()}
+    u2,e2 = h.get_ultracell(hs).get_mean_field_hamiltonian(
+            return_total_energy=True,**kw2)
+    h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
+            integration="ed",**kw)
+    assert abs(e2-e3)<1e-8
+    k = (0.21,0.33,0.) if spin else (0.37,0.,0.)
+    assert same_state(u2,h3,k=k)<1e-7
