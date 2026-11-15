@@ -2,7 +2,6 @@
 # routines for dealing with spin models, using the Holfstein Primakov
 # transformation
 
-from . import neighbor
 import numpy as np
 from scipy.sparse import csc_matrix,coo_matrix
 from scipy.sparse import identity as sparseiden
@@ -36,24 +35,6 @@ class SpinModel():
               "up to 2d")
 
  
-
-def set_couplings(g,f=None):
-  """Set the exchange couplings"""
-  js = []
-  xs = []
-  ys = []
-  if callable(f): # callable function
-    m = neighbor.parametric_hopping(g.r,g.r)
-  else:
-    raise TypeError("set_couplings needs a callable exchange function, pass "
-            "it as f")
-  return m # return pairs
-
-def xyj(m):
-  from scipy.sparse import coo_matrix
-  m2 = coo_matrix(m)
-  return (m.rows,m.cols,m.data)
-
 
 def hp_heisenberg(sm,fun=None,d=None,k=None):
   """Perform the Holfstein-Primakov for this spin model"""

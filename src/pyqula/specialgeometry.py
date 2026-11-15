@@ -40,8 +40,7 @@ def tdbg(m0,**kwargs):
 #  g.angle = theta # terrible workaround
 #  g.data["angle"] = theta # store the angle of the geometry
 #  nsuper = [[m0,m0+r,0],[-m0-r,2*m0+r,0],[0,0,1]]
-#  g = geometry.non_orthogonal_supercell(g,m=nsuper,
-#           reducef=lambda x: 3*np.sqrt(x))
+#  g = geometry.non_orthogonal_supercell(g,m=nsuper)
 #  g1 = g.copy()
 #  g1.shift([1.,0.,0.]) 
 #  g.z -= dz
@@ -104,8 +103,7 @@ def twisted_supercell(g,m0=3,r=1):
   theta = np.arccos((3.*m0**2+3*m0*r+r**2/2.)/(3.*m0**2+3*m0*r+r**2))
   print("Theta",theta*180.0/np.pi)
   nsuper = [[m0,m0+r,0],[-m0-r,2*m0+r,0],[0,0,1]]
-  g = geometry.non_orthogonal_supercell(g,m=nsuper,
-           reducef=lambda x: 3*np.sqrt(x))
+  g = geometry.non_orthogonal_supercell(g,m=nsuper)
   return g
 
 
@@ -131,8 +129,7 @@ def twisted_multilayer(m0=3,rotate=True,shift=None,
       shift = [[0.,0.] for r in rot] # initialize
   print("Theta",theta*180.0/np.pi)
   nsuper = [[m0,m0+r,0],[-m0-r,2*m0+r,0],[0,0,1]]
-  g = geometry.non_orthogonal_supercell(g,m=nsuper,
-           reducef=lambda x: 3*np.sqrt(x))
+  g = geometry.non_orthogonal_supercell(g,m=nsuper)
   if rotate: # rotate one of the layers
     gs = [] # empty list with geometries
     ii = 0
@@ -312,8 +309,7 @@ def twisted_multimultilayer(m0=3,
   zshift= 0.0 # initial shift
   for (irot,gi) in zip(rot,g): # loop
     dzi = np.max(gi.z)-np.min(gi.z) # width of this layer
-    gi = geometry.non_orthogonal_supercell(gi,m=nsuper,
-           reducef=lambda x: 3*np.sqrt(x))
+    gi = geometry.non_orthogonal_supercell(gi,m=nsuper)
     gi.r[:,2] -= np.min(gi.r[:,2]) # lowest layer in zero
     gi.r2xyz() # update
     if irot!=0 and irot!=1: # nope
