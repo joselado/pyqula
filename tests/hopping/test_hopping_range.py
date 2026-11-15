@@ -177,3 +177,60 @@ def test_a_ribbon_from_a_function_takes_a_peierls_phase():
             e0 = bands(h0,np.array([k,0.,0.]))
             e1 = bands(h1,np.array([k,0.,0.]))
             assert np.max(np.abs(e0-e1))<1e-10
+
+
+def _coordination(g,d,nmax=6):
+    """Number of sites at the distance d of each site of g, counted by
+    brute force over the cells |n_k| <= nmax"""
+    r = np.array(g.r)
+    out = np.zeros(len(r),dtype=int)
+    for n1 in range(-nmax,nmax+1):
+        for n2 in range(-nmax,nmax+1):
+            R = n1*np.array(g.a1)+n2*np.array(g.a2)
+            dist = np.linalg.norm(r[None,:,:]+R-r[:,None,:],axis=2)
+            out += np.sum(np.abs(dist-d)<1e-4,axis=1)
+    return out
+
+
+def _bonds(h):
+    """Number of nonzero hoppings of each site, over every cell"""
+    ms = [np.array(h.intra)]+[np.array(t.m) for t in h.hopping]
+    return np.sum([np.sum(np.abs(m)>1e-12,axis=1) for m in ms],axis=0)
+
+
+def test_a_shell_beyond_rcut_is_cut_whole():
+    """rcut is a cut on pairs: on the honeycomb lattice the shell at
+    sqrt(27), just beyond rcut=5.0, is dropped whole by default, where
+    selecting cells kept a part of it, and kept whole with rcut=5.3"""
+    g = geometry.honeycomb_lattice()
+    d = np.sqrt(27.)
+    f = shells([1.,d],[1.,0.1])
+    z1,zd = _coordination(g,1.),_coordination(g,d)
+    assert np.all(zd>0)
+    h = g.get_hamiltonian(has_spin=False,tij=f)
+    assert np.all(_bonds(h)==z1)
+    h = g.get_hamiltonian(has_spin=False,tij=f,rcut=5.3)
+    assert np.all(_bonds(h)==z1+zd)
+    hg = g.get_hamiltonian(has_spin=False,tij=NNG(g,[0.]*10+[1.]),rcut=5.3)
+    assert np.all(_bonds(hg)==_coordination(g,g.neighbor_distances(n=11)[10]))
+
+
+def test_rcut_with_a_list_of_shells_raises():
+    """A list of shells reaches its last shell, so rcut with it is two
+    ranges for one hopping"""
+    g = geometry.chain()
+    with pytest.raises(TypeError,match="rcut"):
+        g.get_hamiltonian(tij=[1.,0.2],rcut=3.)
+
+
+def test_a_finite_system_keeps_every_pair():
+    """In a finite system the default keeps every pair, also beyond 5.0,
+    and rcut= cuts there too when given"""
+    g = geometry.chain().get_supercell(12)
+    g.set_finite()
+    f = shells([1.,8.],[1.,0.3])
+    h = g.get_hamiltonian(has_spin=False,tij=f)
+    m = np.array(h.intra)
+    assert abs(m[0,8]-0.3)<1e-12 and abs(m[8,0]-0.3)<1e-12
+    m = np.array(g.get_hamiltonian(has_spin=False,tij=f,rcut=5.).intra)
+    assert m[0,8]==0. and abs(m[0,1]-1.)<1e-12

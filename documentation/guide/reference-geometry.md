@@ -10,8 +10,8 @@ Optional arguments
 - tij=None: the hoppings. `None` is first-neighbor hopping $t=1$. A list
   gives the 1st, 2nd, 3rd... neighbor hoppings, for example `[1.0,0.2]`. It
   can also be a function of the two positions that returns the hopping
-  between them, or a `specialhopping.HoppingGenerator`; these reach every
-  cell that holds a pair of sites within the distance `rcut`
+  between them, or a `specialhopping.HoppingGenerator`; these reach the
+  distance `rcut`
 - has_spin=True: include the spin degree of freedom
 - is_sparse=False: store the matrices as sparse matrices, for large unit
   cells
@@ -20,12 +20,14 @@ Optional arguments
 - is_multicell=False: include hoppings to unit cells beyond the first
   neighbor cells. A list, a function or a generator in `tij` is always
   stored this way, so that no hopping beyond the neighbor cells is lost
-- nc=None: the cells a function or a generator is evaluated on,
-  $|n_i|\le$ `nc` along each lattice vector (`cutoff=` is the same);
-  `None` is every cell that holds a pair of sites within `rcut`
-- rcut=5.0: the distance that sets those cells. Every pair of sites of
-  such a cell is evaluated, so a hopping that reaches farther is kept only
-  in part and needs a larger `rcut`
+- rcut=None: the distance a function or a generator reaches. Every pair
+  of sites farther than `rcut` has no hopping, so each shell of neighbors
+  is kept or dropped whole. `None` is 5.0 in a periodic system and every
+  pair in a finite one. A longer hopping needs a larger `rcut`. A list
+  reaches its last shell, and `rcut` with a list raises `TypeError`
+- nc=None: a box of cells instead, $|n_i|\le$ `nc` along each lattice
+  vector (`cutoff=` is the same), where every pair of sites is kept unless
+  `rcut` is also given
 
 A misspelled keyword raises `TypeError` with the list of accepted ones.
 

@@ -125,4 +125,10 @@ with a function is behind most model builders.
 Decided by the maintainer on 15 November 2026, after the repair: `rcut` becomes a hard cut, every
 pair of sites farther than `rcut` is zero, so the range is exact and no shell is kept in part; a
 longer tail needs `rcut=` by hand. Since `rcut` is then a distance on pairs, the same kind of
-range as a list of shells, `rcut=` with `tij=[t1,t2,...]` raises a TypeError.
+range as a list of shells, `rcut=` with `tij=[t1,t2,...]` raises a TypeError. Built the same
+day: `rcut=None` means 5.0 in a periodic system and every pair in a finite one, as for the
+interactions (`distance_cut_interaction`), with the same tolerance of 1e-6, so a shell sitting
+at `rcut` is kept. A box of cells (`nc=`, `cutoff=`) keeps every pair of its cells unless
+`rcut=` is also given. On the honeycomb lattice the shell at $\sqrt{27}$, just beyond 5.0,
+is now dropped whole, where the cells within 5.0 kept a part of it
+(`tests/hopping/test_hopping_range.py`).

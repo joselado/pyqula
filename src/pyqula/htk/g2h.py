@@ -18,7 +18,11 @@ def get_hamiltonian(self,tij=None,has_spin=True,
         - nc = None, the cells a function or a generator is evaluated on,
           the box |n_k| <= nc (also accepted as cutoff); None is every cell
           that holds a pair of sites within rcut (specialhopping.cells_within)
-        - rcut = 5.0, the distance that sets those cells
+        - rcut = None, the distance a function or a generator reaches: every
+          pair of sites farther than rcut is zero. None is 5.0 in a periodic
+          system, and no cut in a finite one or on a box of cells (nc,
+          cutoff), where every pair is kept. A list of shells reaches its
+          last shell, and rcut with it is a TypeError
     A function or a generator on a 1D or 2D lattice is built as multicell,
     on every cell within its range, since the single-cell storage keeps
     only the neighboring cells and a farther hopping was dropped
@@ -51,9 +55,14 @@ def get_hamiltonian(self,tij=None,has_spin=True,
           +str(["tij","has_spin","is_sparse","spinful_generator","nc",
                 "non_hermitian","is_multicell","mgenerator"]+forwardable))
     nc_given = nc is not None # the box of cells asked for, if any
+    rcut = kwargs.pop("rcut",None) # the distance a hopping reaches
     ## in case tij is an iterable with hoppings
     from ..checkclass import is_iterable
     if is_iterable(tij): # tij is an iterable
+        if rcut is not None:
+            raise TypeError("got rcut and a list of shells tij=[t1,t2,...], "
+                    "two ranges for the same hopping; a list reaches its "
+                    "last shell, so pass only one of them")
         ts = tij # overwrite the 1st, 2nd etc hoppings
         mgenerator = specialhopping.neighbor_hopping_matrix(self,ts)
         is_multicell = True # overwrite
@@ -79,9 +88,16 @@ def get_hamiltonian(self,tij=None,has_spin=True,
     if is_multicell:  # workaround for multicell hamiltonians
         from ..multicell import parametric_hopping_hamiltonian
         from ..multicell import parametric_matrix
+        # the cut on pairs: rcut if given, else 5.0 in a periodic system,
+        # and none on a box of cells (nc, cutoff, a list) or a finite system
+        box = nc is not None or "cutoff" in kwargs
+        if rcut is not None: cut = float(rcut)
+        elif box or self.dimensionality==0: cut = None
+        else: cut = 5.0
+        reach = cut if cut is not None else 5.0 # the cells to evaluate
         # a Hermitian Hamiltonian is evaluated on one cell of each pair R,
         # -R and the other is its adjoint; a non-Hermitian one on both
-        cells = hopping_cells(self,nc,nc_given,kwargs,
+        cells = hopping_cells(self,nc,nc_given,kwargs,rcut=reach,
                 half=not non_hermitian)
         if spinful_generator: h.has_spin = True # 2x2 blocks per pair
         if mgenerator is not None: # if mgenerator is given
@@ -89,7 +105,10 @@ def get_hamiltonian(self,tij=None,has_spin=True,
                     spinful_generator=spinful_generator)
         else:
             h = parametric_hopping_hamiltonian(h,fc=tij,cells=cells,
-                    spinful_generator=spinful_generator,**kwargs) # add hopping
+                    rcut=reach+_TOL,spinful_generator=spinful_generator,
+                    **kwargs) # add hopping
+        if cut is not None and (tij is not None or mgenerator is not None):
+            cut_pairs(h,cut) # every pair farther than rcut is zero
         if not non_hermitian: add_reverse_cells(h) # the hopping to -R
     else: # non multicell
         if tij is None and mgenerator is None: # no function given
@@ -100,6 +119,7 @@ def get_hamiltonian(self,tij=None,has_spin=True,
             h = generate_parametric_hopping(h,f=tij,
                       spinful_generator=spinful_generator,
                       mgenerator=mgenerator) # add hopping
+            if rcut is not None: cut_pairs(h,float(rcut)) # only if asked
           elif h.dimensionality==3:
             if mgenerator is not None:
                 raise NotImplementedError("a matrix generator is not "
@@ -137,27 +157,58 @@ def is_forward(d):
     return False # the cell 0
 
 
-def hopping_cells(g,nc,nc_given,kwargs,half=True):
+_TOL = 1e-6 # a shell sitting exactly at rcut is kept whole
+
+
+def hopping_cells(g,nc,nc_given,kwargs,rcut=5.0,half=True):
     """The cells (n1,n2,n3) a hopping function or generator is evaluated
     on: the box |n_k| <= nc, which the multicell builders call cutoff, or
-    else every cell with a pair of sites within rcut=5.0. With half, one
-    cell of each pair d, -d (is_forward), the other being its adjoint.
-    The cell 0 is not in the list, the builders evaluate it apart. Pops
-    cutoff from kwargs, and leaves rcut for the function builder, which
-    skips a cell with no pair within it"""
+    else every cell with a pair of sites within rcut. With half, one cell
+    of each pair d, -d (is_forward), the other being its adjoint. The cell
+    0 is not in the list, the builders evaluate it apart. Pops cutoff from
+    kwargs"""
     if "cutoff" in kwargs:
         if nc_given:
             raise TypeError("got both nc and cutoff, two names of the box "
                     "of cells of a hopping; pass only one of them")
         nc = kwargs.pop("cutoff")
     if nc is None:
-        cells = specialhopping.cells_within(g,kwargs.get("rcut",5.0))
+        cells = specialhopping.cells_within(g,rcut)
     else:
         from ..neighbor import neighbor_directions
         cells = [tuple(int(x) for x in d) for d in neighbor_directions(g,nc)]
     cells = [c for c in cells if c!=(0,0,0)]
     if half: cells = [c for c in cells if is_forward(c)]
     return cells
+
+
+def cut_pairs(h,rcut):
+    """Zero every entry of a pair of sites farther than rcut, |r_j+R-r_i| >
+    rcut, in the cell 0 and in every cell R of a multicell Hamiltonian, and
+    drop a cell left with no entry. Each distance shell is kept or dropped
+    whole, which selecting cells alone does not do: a kept cell also holds
+    pairs beyond rcut"""
+    import scipy.sparse as sp
+    g = h.geometry
+    r = np.array(g.r)
+    ns = h.intra.shape[0]//len(r) # entries per site, two with spin
+    A = np.array([g.a1,g.a2,g.a3])
+    def cut(m,d):
+        c = sp.coo_matrix(m)
+        R = np.array(d,dtype=float)@A
+        dist = np.linalg.norm(r[c.col//ns]+R-r[c.row//ns],axis=1)
+        keep = dist<=rcut+_TOL
+        out = sp.coo_matrix((c.data[keep],(c.row[keep],c.col[keep])),
+                shape=m.shape)
+        out = out.tocsc() if sp.issparse(m) else out.toarray()
+        return out,int(np.sum(keep))
+    h.intra = cut(h.intra,[0,0,0])[0]
+    if not h.is_multicell: return # a finite system, the cell 0 only
+    hopping = []
+    for t in h.hopping:
+        t.m,n = cut(t.m,[int(x) for x in t.dir])
+        if n>0: hopping.append(t)
+    h.hopping = hopping
 
 
 def add_reverse_cells(h):
