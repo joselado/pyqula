@@ -165,7 +165,8 @@ class KondoLatticeHamiltonian(Hamiltonian):
     exact under a field. Genuine physics, not a bug: a field competes with
     the Kondo singlet, so |V| SHRINKS as the field grows at fixed J, and a
     strong enough field destroys the hybridized state entirely -- the SCF
-    then correctly reports non-convergence (a `None` return), the same
+    then correctly reports non-convergence (get_mean_field_hamiltonian
+    raises scftk.convergence.MeanFieldConvergenceError), the same
     "decays toward the always-self-consistent V=0 branch" signal a
     subcritical J produces (see kondo_lattice_mean_field's `residual`
     docstring) -- not a smaller-but-nonzero V. See
