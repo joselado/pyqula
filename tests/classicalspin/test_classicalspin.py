@@ -135,3 +135,22 @@ def test_energy_is_a_python_number_and_minimize_can_be_silent(capsys):
     sm.minimize_energy(tries=1, silent=True)
     assert capsys.readouterr().out == ""
     assert type(sm.energy()) is float
+
+
+def test_local_energies_add_up_with_pairs_of_a_site_with_its_images():
+    """On the periodic 2x2 cell of the triangular lattice the third shell,
+    at distance 2, is a lattice vector of the cell, so every site is coupled
+    to its own six images, a pair (i,i) with J_ii=6*0.2=1.2. The local
+    energy halved that pair too, as if it were a bond between two sites,
+    and the local energies added up to 2.4 less than the energy"""
+    np.random.seed(3)
+    g = geometry.triangular_lattice().get_supercell(2) # 4 sites
+    sm = classicalspin.SpinModel(g)
+    sm.add_heisenberg(Jij=[1., 0.5, 0.2])
+    diag = (sm.pairs[:, 0] == sm.pairs[:, 1]) & (np.abs(sm.j[:, 0, 0]) > 1e-8)
+    assert np.any(diag) # the pairs of a site with its own images are there
+    sm.add_field([0.1, -0.2, 0.3])
+    sm.theta = np.random.random(sm.nspin)*np.pi # a generic state
+    sm.phi = np.random.random(sm.nspin)*2.*np.pi
+    local = sm.get_local_energy()
+    assert np.isclose(np.sum(local), sm.energy(), atol=1e-4)
