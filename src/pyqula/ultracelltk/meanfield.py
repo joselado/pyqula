@@ -6,9 +6,11 @@ modulated supercell plus the mean field, and needs three things from a
 backend: the density matrix at the entries the mean field reads, the Fermi
 level that holds a filling, and the band energy. This module computes the
 three from the ultracell states instead of the full diagonalization of the
-supercell. The states are written on the supercell orbitals, so the density
-matrix comes out of the same kernel the "ed" backend uses
-(densitymatrix._accumulate_dm_batch), with the same conventions.
+supercell. The states are written on the supercell orbitals, and the density
+matrix is summed from them with the convention of the "ed" backend (the
+transpose of rho), at the entries the mean field reads, as dense matrices
+for scftk.densitydensity (get_dm) or sparse ones for the sparse engines
+(get_dm_sparse).
 
 The supercell Hamiltonian carries the folded basis as the attribute
 ultracell_basis, which u.get_mean_field_hamiltonian() sets and which the
@@ -31,6 +33,7 @@ import numpy as np
 from copy import copy
 from scipy.linalg import eigh
 from scipy.sparse import issparse, csr_matrix
+from numba import jit, prange
 
 from .basis import pad3
 from .matrix import ultracell_matrix, real_space_states
@@ -187,35 +190,101 @@ def mesh_states(h,nk):
     return states
 
 
+@jit(nopython=True,parallel=True,cache=True)
+def pair_sums(Phi,occ,rows,cols):
+    """sum_s occ[s] conj(Phi[i,s]) Phi[j,s] for every pair (i,j) =
+    (rows[p],cols[p]), without the (npairs,nstates) temporaries"""
+    out = np.zeros(len(rows),dtype=np.complex128)
+    ns = Phi.shape[1]
+    for p in prange(len(rows)):
+        i = rows[p] ; j = cols[p]
+        acc = 0j
+        for s in range(ns): acc += occ[s]*np.conj(Phi[i,s])*Phi[j,s]
+        out[p] = acc
+    return out
+
+
+def smearing(T):
+    """The smearing of the occupations for a temperature T, as
+    integration="ed" takes it"""
+    from ..densitymatrix import nonzero_smearing, delta_dm
+    if T is None: T = delta_dm
+    return nonzero_smearing(T)
+
+
+def occupied(states,ik,delta):
+    """Eigenvalues, Fermi-Dirac occupations and eigenvectors on the
+    supercell orbitals of the occupied states at kpoint ik"""
+    es,Phi = states.real_space(ik,emax=empty_ratio*delta)
+    return es,1./(1.+np.exp(es/delta)),Phi
+
+
+def dm_entries(states,needed,delta):
+    """The density matrix at the entries needed, {d: (rows,cols)}, as
+    {d: values}, with the convention of integration="ed",
+    dm[d][i,j] = (1/Nk) sum_k exp(2 pi i k.d) sum_s f_s conj(phi_s(i)) phi_s(j),
+    the transpose of rho. At one kpoint the sum over the states is the same
+    for every direction, so it is taken once on the union of the pairs"""
+    n = states.n
+    keys = {d: np.asarray(r,dtype=np.int64)*n + np.asarray(c,dtype=np.int64)
+            for d,(r,c) in needed.items()}
+    union = np.unique(np.concatenate([np.zeros(0,dtype=np.int64)]
+        + list(keys.values())))
+    ur,uc = union//n,union%n
+    where = {d: np.searchsorted(union,kd) for d,kd in keys.items()}
+    vals = {d: np.zeros(len(kd),dtype=np.complex128) for d,kd in keys.items()}
+    for ik,k in enumerate(states.ks):
+        es,occ,Phi = occupied(states,ik,delta)
+        s = pair_sums(Phi,occ,ur,uc)
+        for d in vals:
+            vals[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*s[where[d]]
+    for d in vals: vals[d] /= len(states.ks)
+    return vals
+
+
+def dm_full(states,ds,delta):
+    """Every entry of the density matrix in the directions ds, dense,
+    with one product per kpoint shared by every direction"""
+    n = states.n
+    out = {d: np.zeros((n,n),dtype=np.complex128) for d in ds}
+    for ik,k in enumerate(states.ks):
+        es,occ,Phi = occupied(states,ik,delta)
+        M = (np.conjugate(Phi)*occ[None,:])@Phi.T
+        for d in ds: out[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*M
+    for d in out: out[d] /= len(states.ks)
+    return out
+
+
 def get_dm(h,v,nk=1,T=None,full=False):
     """Density matrix of the supercell h in its ultracell states, one
     (n,n) matrix per direction of v (a dict, or a list of directions with
     full=True), with every state below zero energy occupied with the
     Fermi-Dirac weight of temperature T, as integration="ed" builds it.
     Without full, only the entries the mean field reads are computed"""
-    from ..densitymatrix import _accumulate_dm_batch, nonzero_smearing, delta_dm
     from ..scftk.densitydensity import dm_sparse_pairs
     get_basis(h) # check that h is the supercell of an ultracell
-    if T is None: T = delta_dm
-    if T==0.: T = 1e-15 # as densitymatrix.full_dm does
-    delta = nonzero_smearing(T)
+    delta = smearing(T)
     ds = [(0,0,0)] + [tuple(d) for d in v if tuple(d)!=(0,0,0)]
     n = h.intra.shape[0]
-    if full: # every entry of every direction, with the dense kernel
-        allidx = np.arange(n)
-        pairs = {d: (allidx,allidx) for d in ds}
-        threshold = -1
-    else:
-        pairs = dm_sparse_pairs(v,ds,n,has_spin=h.has_spin)
-        threshold = 0.01*n*n # as densitymatrix.full_dm_accumulate_sparse
     states = mesh_states(h,nk) # those of the Fermi search, if kept
+    if full: return dm_full(states,ds,delta)
+    pairs = dm_sparse_pairs(v,ds,n,has_spin=h.has_spin)
+    vals = dm_entries(states,pairs,delta)
     outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
-    for ik,k in enumerate(states.ks):
-        es,Phi = states.real_space(ik,emax=empty_ratio*delta) # occupied
-        _accumulate_dm_batch(outd,pairs,threshold,es[None,:],Phi[None,:,:],
-                np.array(k,dtype=np.float64)[None,:],delta)
-    for d in outd: outd[d] /= len(states.ks)
+    for d,(rows,cols) in pairs.items(): outd[d][rows,cols] = vals[d]
     return outd
+
+
+def get_dm_sparse(h,needed,nk=1,T=None):
+    """Density matrix of the supercell h in its ultracell states at the
+    entries needed, {d: (rows,cols)}, as {d: csr (n,n)}, with the
+    convention of get_dm; the counterpart of
+    kpmtk.densitymatrix_kpm.get_dm_kpm_sparse"""
+    get_basis(h)
+    n = h.intra.shape[0]
+    vals = dm_entries(mesh_states(h,nk),needed,smearing(T))
+    return {d: csr_matrix((vals[d],(np.asarray(r),np.asarray(c))),
+        shape=(n,n),dtype=np.complex128) for d,(r,c) in needed.items()}
 
 
 def fermi_level(esk,n,filling,T=0.):
