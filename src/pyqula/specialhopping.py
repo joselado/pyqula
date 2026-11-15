@@ -393,12 +393,18 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
     cells away on a small cell was dropped, and on a large cell the pairs
     kept depended on where the site sits in the cell. A HoppingGenerator
     (NNG and the others) is evaluated the same way on every cell within
-    rcut (generator_within). A list of shell couplings or None goes through
-    g.get_hamiltonian(tij=Jij) as before, with the range of its shells;
-    rcut is for a function or a generator only"""
+    rcut (generator_within). Both are checked before they are folded
+    (require_pair_interaction): the coupling of a pair is one real number,
+    and the models keep only the real part, so a complex or a
+    non-reciprocal coupling raises instead of being changed in silence.
+    A list of shell couplings or None goes through g.get_hamiltonian(tij=Jij)
+    as before, with the range of its shells; rcut is for a function or a
+    generator only"""
     from scipy.sparse import coo_matrix
     if isinstance(Jij,HoppingGenerator): # a matrix of couplings per cell
-        return coo_matrix(generator_within(g,Jij.f,rcut=rcut))
+        ms = generator_within(g,Jij.f,rcut=rcut)
+        require_pair_interaction(ms,name=name) # as a function is checked
+        return coo_matrix(sum(ms.values()))
     if callable(Jij):
         ms = distance_cut_interaction(g,Jij,rcut=rcut,name=name)
         return coo_matrix(sum(ms.values()))
@@ -414,19 +420,24 @@ def generator_within(g,fm,rcut=None):
     """The couplings of a matrix generator fm(rs1,rs2), the coupling of
     every position of rs1 with every position of rs2, between the sites of
     g and those of every cell that holds a pair within rcut, each pair
-    beyond rcut dropped, folded onto the cell (the k=0 matrix). rcut=None
-    is every pair of a finite system and 5.0 for a periodic one, as in
-    distance_cut_interaction"""
+    beyond rcut dropped, as a spinless {direction: matrix} dictionary with
+    m[i,j] the coupling of the pair (r_i, r_j + R_d), the same form as
+    distance_cut_interaction gives for a function. Every cell d is built
+    together with -d, so that the reciprocity of a pair can be checked.
+    rcut=None is every pair of a finite system and 5.0 for a periodic one,
+    as in distance_cut_interaction"""
     r = np.array(g.r)
-    if g.dimensionality==0 and rcut is None: return np.array(fm(r,r))
+    if g.dimensionality==0 and rcut is None:
+        return {(0,0,0): np.array(fm(r,r),dtype=np.complex128)}
     rcut = 5.0 if rcut is None else float(rcut)
-    out = 0.
+    out = dict()
     for d in cells_within(g,rcut):
         R = d[0]*np.array(g.a1) + d[1]*np.array(g.a2) + d[2]*np.array(g.a3)
         m = np.array(fm(r,r+R),dtype=np.complex128)
         dist = np.linalg.norm(r[None,:,:]+R-r[:,None,:],axis=2) # |r_j+R-r_i|
         m[dist>rcut+1e-6] = 0. # a shell sitting at rcut is kept whole
-        out = out + m
+        # != and not a maximum: a NaN must stay, for the check to see it
+        if np.any(m!=0.) or d==(0,0,0): out[d] = m
     return out
 
 

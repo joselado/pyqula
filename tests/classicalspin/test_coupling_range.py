@@ -146,3 +146,25 @@ def test_a_coupling_with_no_pair_in_range_adds_nothing(model):
     g = geometry.chain().get_supercell(2)
     _,e = build(model,g,Jij=tail,rcut=0.5)
     assert abs(e([1.,-1.]))<1e-12
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_a_hopping_generator_is_checked_as_a_function(model):
+    """The coupling of a pair is one real number. A HoppingGenerator that
+    is imaginary, or that couples a pair from one end only, raises as the
+    same coupling written as a function does. The generator path had no
+    check, and the models keep only the real part, so the imaginary
+    coupling became no coupling and the one-sided one half of a bond"""
+    from pyqula.specialhopping import NNG, HoppingGenerator
+    g = geometry.chain().get_supercell(2)
+    fm = NNG(g,[1.]).f # first neighbors
+    imaginary = HoppingGenerator(lambda rs1,rs2: 1j*np.array(fm(rs1,rs2)))
+    with pytest.raises(ValueError, match="Jij must be real"):
+        build(model,g,Jij=imaginary)
+    def forward(rs1,rs2): # from x to x+1 only
+        return np.array([[1.*(abs(b[0]-a[0]-1.)<1e-6) for b in rs2]
+                         for a in rs1])
+    with pytest.raises(ValueError, match="Jij is not reciprocal"):
+        build(model,g,Jij=HoppingGenerator(forward))
+    _,e = build(model,g,Jij=NNG(g,[1.])) # a real reciprocal one is taken
+    assert abs(e([1.,1.]))>0.1
