@@ -172,3 +172,28 @@ included. By area:
   (339b907).
 
 The whole suite on 7934143 gave 4261 passed and the 4 thread-count failures of a two-thread cap.
+On b03144c, with the ultracell window and the later decisions, it gave 4293 passed, 11 skipped
+and the same 4 failures.
+
+The optimizations were timed old against new after the suite, at two threads with a load of
+about 1, so the times are a ratio. Every result is the same as before:
+
+- `_build_v` and `_build_density_v` with `np.kron`, on 200 sites of the honeycomb lattice and
+  7 directions, three exchange channels and the density one: identical matrices, 1.68 s to
+  0.17 s.
+- The BSE `density_interaction` with `np.kron`, on 288 sites and 9 directions: identical
+  matrices, 0.64 s to 0.033 s.
+- `hopping2deltaud` from `np.nonzero`, two directions of a honeycomb cell with a Haldane term:
+  identical to the last bit, 0.09 s to 0.002 s at 50 sites and 19.7 s to 0.087 s at 1800 sites.
+- The four ultracell optimizations, on spinful graphene with Rashba coupling, a modulated onsite
+  energy and exchange on 24x24 cells (2304 orbitals, 1450 kept states at `emax=1.0`, one
+  kpoint), every result the same to 1e-12. The density-matrix entries go from 0.27 to 0.25 s and
+  from 241 to 214 MB of peak. The matrix and the mean-field states change by 2 percent at most,
+  which is the noise of the measurement, so eigh in place and the folded momenta once buy
+  nothing visible here. The copy of the weighted states a chunk at a time in `site_sum` made
+  `u.get_ldos()` and `u.get_vev()` worse, from 301 to 335 MB and from 248 to 273 MB of peak: at
+  this size one chunk holds every kept state, so the full eigenvectors stayed alive beside the
+  copy. It was reverted, and the two peaks are back at 301 and 248 MB.
+
+The optimization of the Kondo density-matrix entries, held on the branch
+`held/kondo-dm-entries`, was not timed.
