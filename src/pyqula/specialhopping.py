@@ -246,7 +246,10 @@ def require_reciprocal_interaction(v,name="Vr",tol=1e-8):
 
 def _interaction_matrices(g,Vr,**kwargs):
     """Vr on every pair of sites that the multicell builder keeps, as a
-    spinless {direction: matrix} dictionary. The builder is the one of the
+    spinless {direction: matrix} dictionary. Both directions of each pair
+    are evaluated (non_hermitian=True): a Hermitian build takes the cell -d
+    as the adjoint of the cell d, so require_pair_interaction would never
+    see a Vr that is not reciprocal. The builder is the one of the
     hoppings, and its warning for a function that is not reciprocal gives
     the advice of a hopping (non_hermitian=True), which is wrong for an
     interaction: require_pair_interaction raises for it instead. That
@@ -258,7 +261,7 @@ def _interaction_matrices(g,Vr,**kwargs):
         warnings.filterwarnings("ignore",message="the hopping function tij "
                 "is not reciprocal")
         hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr,
-                **kwargs)
+                non_hermitian=True,**kwargs)
     return {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
             for d,m in hv.get_hopping_dict().items()}
 
