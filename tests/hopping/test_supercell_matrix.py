@@ -165,6 +165,16 @@ def test_matrix_of_the_dimensionality_is_padded():
     assert np.max(np.abs(spectrum(hs1,k)-spectrum(hs3,k)))<1e-10
 
 
+def test_ncut_is_refused_for_a_matrix():
+    """The repetitions take a range cut ncut, a matrix supercell keeps
+    every hopping, so ncut with a matrix is refused with a message"""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    with pytest.raises(TypeError,match="no meaning for a matrix supercell"):
+        h.get_supercell(SQRT3,ncut=5)
+    hs = h.get_supercell([2,2],ncut=5) # the repetitions keep the cut
+    assert hs.intra.shape[0]==4*h.intra.shape[0]
+
+
 def test_same_as_the_supercell_of_the_geometry():
     """For a model the geometry builds by itself, the supercell of h and
     the Hamiltonian of the supercell geometry are the same matrices up to

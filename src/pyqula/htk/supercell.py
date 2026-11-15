@@ -42,7 +42,7 @@ def bulk2film(hin,n=10):
 
 
 
-def matrix_supercell(hin,M,sparse=True):
+def matrix_supercell(hin,M,sparse=True,ncut=None):
     """The supercell Hamiltonian of h along an integer matrix M, with the
     lattice vectors A_S = M A (rows, M of shape 3x3, the identity beyond the
     dimensionality), for any M, diagonal or not. On a d-dimensional lattice
@@ -58,7 +58,12 @@ def matrix_supercell(hin,M,sparse=True):
     the cells of the supercell are a grid in R Q (ultracelltk/basis.py).
     Spin and the electron-hole degree of freedom go with each site, as in
     the unit cell. Returns a sparse Hamiltonian unless sparse=False, as
-    h.get_supercell does for repetitions"""
+    h.get_supercell does for repetitions. Every hopping of the unit cell
+    is kept, so the range cut ncut of the repetitions is refused here"""
+    if ncut is not None:
+        raise TypeError("ncut="+str(ncut)+" has no meaning for a matrix "
+                "supercell, which keeps every hopping of the unit cell; "
+                "leave ncut out")
     from scipy.sparse import coo_matrix, csc_matrix
     from ..unfolding import get_supercell_map
     from ..ultracelltk.basis import supercell_shape, pad3
