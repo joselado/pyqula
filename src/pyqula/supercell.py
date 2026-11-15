@@ -16,6 +16,17 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=None):
   size of that search from the volume increase, has no effect; it is still
   accepted because the twisted-multilayer builders pass it. ncheck is used
   by the brute mode only"""
+  # rounded and not truncated, so that a matrix computed in floating
+  # point, with 1.9999999999 for 2, is the matrix of those integers, for
+  # the cell vectors and for the recorded supercell_matrix alike
+  mf = np.array(m,dtype=float)
+  if mf.shape!=(3,3):
+    raise ValueError("the supercell matrix must be 3x3, got shape "
+            +str(mf.shape))
+  if not np.all(np.abs(mf-np.round(mf))<1e-6): # also refuses a nan
+    raise ValueError("the supercell matrix must have integer entries, got "
+            +str(mf.tolist()))
+  m = np.round(mf).astype(int)
   # workaround
   g = gin.copy()
   if g.dimensionality==0: return

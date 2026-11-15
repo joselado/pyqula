@@ -125,6 +125,18 @@ def test_matrix_a_rounding_error_from_integers():
         h.get_supercell(np.array(SQRT3,dtype=float)+0.5*np.identity(3))
 
 
+def test_geometry_rounds_a_float_matrix():
+    """The geometry path rounds a float supercell matrix too: the cell and
+    the recorded supercell_matrix, which the unfolding reads, are those of
+    the integers, and an entry far from an integer is refused"""
+    g = geometry.honeycomb_lattice()
+    gs = g.get_supercell(np.array(SQRT3,dtype=float)*(1.-1e-13))
+    assert np.array_equal(np.array(gs.supercell_matrix),np.array(SQRT3))
+    assert len(gs.r)==3*len(g.r)
+    with pytest.raises(ValueError,match="integer entries"):
+        g.get_supercell(np.array(SQRT3,dtype=float)+0.5*np.identity(3))
+
+
 def test_same_as_the_supercell_of_the_geometry():
     """For a model the geometry builds by itself, the supercell of h and
     the Hamiltonian of the supercell geometry are the same matrices up to
