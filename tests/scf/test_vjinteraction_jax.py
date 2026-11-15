@@ -138,6 +138,25 @@ def test_vjinteraction_jax_combined_v_and_anisotropic_j_matches_numpy_engine():
     assert diff < 1e-3
 
 
+@pytest.mark.parametrize("filling", [0., 1.])
+def test_vjinteraction_jax_full_and_empty_filling_match_numpy_engine(filling):
+    """At filling 1 every spin-orbital is occupied and at filling 0 none.
+    The jax engine clamped the count to one state from either end of the
+    mesh; it must hold the count and give the density matrix of the numpy
+    engine, at a T where the T=0 cut alone would half-fill the last state"""
+    g = geometry.honeycomb_lattice()
+    h0 = g.get_hamiltonian(has_spin=True)
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=0)
+    kw = dict(U=2.0, J1=-0.5, filling=filling, nk=4, T=1e-2,
+            maxerror=1e-10, verbose=0)
+    scf_np = VJinteraction(h1.copy(), mf=mf0.copy(), **kw)
+    scf_jax = VJinteraction(h1.copy(), mf=mf0.copy(), use_jax=True,
+            solver="newton", **kw)
+    count = np.trace(scf_jax.dm[(0, 0, 0)]).real / 4
+    assert abs(count - filling) < 1e-9
+    assert np.max(np.abs(scf_jax.dm[(0, 0, 0)] - scf_np.dm[(0, 0, 0)])) < 1e-8
+
+
 def test_vjinteraction_jax_filling_target_hamiltonian_matches_numpy_engine():
     """Regression test for a real bug found during development: the numpy
     engine shifts every SCF iterate (hence its final scf.hamiltonian) by

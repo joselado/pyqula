@@ -180,7 +180,9 @@ def mu_for_filling(es, n_occ, T):
     on the stopped-gradient spectrum, then one Newton step on the live one.
     At the root that step contributes exactly the implicit-function
     derivative dmu = sum_i w_i de_i / sum_i w_i, w = f(1-f), which is what
-    jax.jacfwd of the SCF step needs."""
+    jax.jacfwd of the SCF step needs. n_occ equal to every level, or zero,
+    puts mu 40 T beyond the last level (at least 1e-5), where no count can
+    be solved, as spectrum.get_fermi_energy_T does."""
     es = es.reshape(-1)
     es_sorted = jnp.sort(es)
     ntarget = jnp.asarray(n_occ, dtype=es.dtype)
@@ -188,7 +190,11 @@ def mu_for_filling(es, n_occ, T):
     def count(mu, e):
         return jnp.sum(jax.nn.sigmoid(-(e - mu) / T))
 
-    mu_mid = 0.5 * (es_sorted[n_occ - 1] + es_sorted[n_occ])
+    nlev = es_sorted.shape[0]
+    # the two levels either side of the cut, inside the spectrum at either
+    # end; the ends themselves are handled below
+    mu_mid = 0.5 * (es_sorted[jnp.clip(n_occ - 1, 0, nlev - 1)]
+            + es_sorted[jnp.clip(n_occ, 0, nlev - 1)])
     exact = jnp.abs(count(mu_mid, es) - ntarget) < 1e-9 * ntarget
     # bisection, outside the derivative
     es_c = jax.lax.stop_gradient(es)
@@ -211,7 +217,14 @@ def mu_for_filling(es, n_occ, T):
     # gapped spectrum, where dcount underflows), and keeps its tangent finite
     safe = jnp.where(dcount > 1e-300, dcount, 1.)
     mu_count = mu_b - (jnp.sum(f) - ntarget) / safe
-    return jnp.where(exact, mu_mid, mu_count)
+    mu = jnp.where(exact, mu_mid, mu_count)
+    # full or empty: no finite mu holds every state (or none) at T>0, so mu
+    # goes 40 T beyond the last level, at least the 1e-5 of the T=0 cut, as
+    # in spectrum.get_fermi_energy_T; each level then misses exp(-40) of an
+    # electron, and mu follows that level
+    beyond = jnp.maximum(40. * T, 1e-5)
+    mu = jnp.where(n_occ >= nlev, es_sorted[nlev - 1] + beyond, mu)
+    return jnp.where(n_occ <= 0, es_sorted[0] - beyond, mu)
 
 
 def normal_term_ii_jax(v, dm):
@@ -1147,7 +1160,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     if filling is not None:
         n_tot = n * ks.shape[0]
         n_occ_total = int(round(filling * n_tot))
-        n_occ_total = min(max(n_occ_total, 1), n_tot - 1)
+        n_occ_total = min(max(n_occ_total, 0), n_tot) # every state, or none
     # not wrapped in an extra jax.jit: build_step_function's returned
     # closure already dispatches into a cached, once-jitted core shared
     # across every call with this same structural shape -- see

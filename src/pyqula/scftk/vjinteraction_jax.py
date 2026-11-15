@@ -419,7 +419,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     if filling is not None:
         n_tot = n * ks.shape[0]
         n_occ_total = int(round(filling * n_tot))
-        n_occ_total = min(max(n_occ_total, 1), n_tot - 1)
+        n_occ_total = min(max(n_occ_total, 0), n_tot) # every state, or none
 
     # not wrapped in an extra jax.jit: build_step_function_vj's returned
     # closure already dispatches into a cached, once-jitted core shared

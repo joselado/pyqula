@@ -220,6 +220,45 @@ def test_densitydensity_jax_filling_holds_the_requested_electron_count(solver,
     assert abs(count - filling) < 1e-8
 
 
+@pytest.mark.parametrize("solver", ["fixed_point", "newton"])
+@pytest.mark.parametrize("filling", [0., 1.])
+def test_densitydensity_jax_full_and_empty_filling_match_numpy_engine(solver,
+        filling):
+    """At filling 1 every state is occupied and at filling 0 none, at any
+    T. The jax engine clamped the count to one state from either end, so
+    filling 1 left one state of the mesh empty and filling 0 filled one;
+    it must hold the count and give the density matrix of the numpy
+    engine, at a T where the T=0 cut alone would half-fill the last state"""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    mf0 = {(0, 0, 0): np.zeros((2, 2), dtype=complex)}
+    kw = dict(V1=0.5, nk=4, filling=filling, maxerror=1e-12, T=1e-2)
+    scf_jax = Vinteraction(h.copy(), mf=mf0, use_jax=True, solver=solver,
+            **kw)
+    scf_np = Vinteraction(h.copy(), mf=mf0, **kw)
+    count = np.trace(scf_jax.dm[(0, 0, 0)]).real / 2
+    assert abs(count - filling) < 1e-9
+    assert np.max(np.abs(scf_jax.dm[(0, 0, 0)] - scf_np.dm[(0, 0, 0)])) < 1e-9
+
+
+def test_mu_for_filling_holds_every_state_and_none():
+    """n_occ equal to the number of levels, or zero, has no level above (or
+    below) the cut: mu goes 40 T beyond the spectrum, as
+    spectrum.get_fermi_energy_T does, the count is exact and its
+    derivative finite"""
+    from pyqula.scftk.densitydensity_jax import mu_for_filling
+    import jax.numpy as jnp
+    es = jnp.asarray([-1., -0.8, 0.5, 1., 2.])
+    de = jnp.asarray([0.3, -0.2, 0.1, 0.4, -0.5])
+    for T in [1e-2, 1e-6]:
+        for n_occ in [0, len(es)]:
+            mu = lambda t: mu_for_filling(es + t * de, n_occ, T)
+            m0, dmu = jax.jvp(mu, (0.,), (1.,))
+            count = jnp.sum(jax.nn.sigmoid(-(es - m0) / T))
+            assert abs(float(count) - n_occ) < 1e-9
+            assert np.isfinite(float(dmu))
+
+
 def test_mu_for_filling_derivative_matches_finite_differences():
     """mu_for_filling solves the count inside the jax trace, and its
     derivative is what Newton's Jacobian sees. Check it against central
