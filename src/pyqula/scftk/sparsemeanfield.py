@@ -312,6 +312,16 @@ def get_dc_energy_anomalous(mf, dm):
     return -np.real(out)/2.
 
 
+def as_sparse(mf):
+    """A starting mean field {direction: matrix} as csr matrices. A dense
+    one (an MF.pkl of a dense run, an mf= dictionary, a named guess) would
+    otherwise stay dense in the sparse loop: the mixing of a dense and a
+    sparse matrix is dense, and the convergence check (densitydensity.
+    diff_mf) then averages the change over all n^2 entries instead of over
+    the stored ones, which weakens maxerror by about nnz/n^2"""
+    return {d: csr_matrix(m, dtype=np.complex128) for (d, m) in mf.items()}
+
+
 def random_guess(v, h, scale=1.0):
     """Sparse counterpart of densitydensity.random_hermitian_guess: random
     phases on every entry of the blocks of the pairs of sites the

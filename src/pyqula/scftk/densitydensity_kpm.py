@@ -115,6 +115,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
         mf = guess(h0, mode=mf)
     else: pass
     mf = obj2mf(mf)
+    if sparse: mf = sparsemeanfield.as_sparse(mf) # the loop stays sparse
     fs.rmfile("STOP")
     hop0 = hamiltonian2dict(h1)
     if sparse: # the density-matrix entries the mean field reads, once
