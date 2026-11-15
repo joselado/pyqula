@@ -86,7 +86,7 @@ def site_sum(u,kS,weight,operator=None):
     """sum_s weight(e_s) |Phi_s(a)|^2 on every orbital a of the supercell,
     or with Re[conj(Phi_s(a)) (O Phi_s)(a)] for an operator matrix O, over
     the eigenstates at kS whose weight is not zero, a chunk of states at a
-    time"""
+    time. Returns it and the eigenvalues at kS"""
     es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
     w = weight(es)
     keep = w!=0.
@@ -97,7 +97,7 @@ def site_sum(u,kS,weight,operator=None):
         if operator is None: w2 = np.abs(Phi)**2
         else: w2 = np.real(np.conjugate(Phi)*np.asarray(operator@Phi))
         out += w2@w[sl]
-    return out
+    return out,es
 
 
 def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
@@ -113,7 +113,7 @@ def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
     ks = ultracell_kmesh(u,nk)
     d = 0.
     def lor(es): return delta/((e-es)**2 + delta**2)/np.pi # per state
-    for k in ks: d = d + site_sum(u,k,lor)
+    for k in ks: d = d + site_sum(u,k,lor)[0]
     d = full2profile(u.hs,d/len(ks)) # sum the orbitals of each site
     g = u.hs.geometry
     if write: write_ldos(g.x,g.y,d)
@@ -128,11 +128,12 @@ def vev(u,operator=None,nk=10):
     delta_dm of densitymatrix, so that a level at zero energy is half
     occupied. Without an operator it is the occupation of each site, as
     hs.get_vev(). It needs every occupied state in the basis, so emax must
-    be above zero"""
+    be above zero, and with a cut zero energy must lie below the highest
+    kept state of hs, as meanfield.fermi_level requires of a filling"""
     from scipy.special import expit
     from ..densitymatrix import default_smearing, nonzero_smearing
     from ..increase_hilbert import full2profile
-    from .meanfield import empty_ratio
+    from .meanfield import empty_ratio, require_kept_above
     if u.hs.has_eh:
         raise NotImplementedError("expectation values of the ultracell are "
                 "not implemented for a Hamiltonian with the electron-hole "
@@ -157,8 +158,14 @@ def vev(u,operator=None,nk=10):
     delta = nonzero_smearing(default_smearing(u.hs))
     def occupied(es): # empty from empty_ratio smearings above zero
         return np.where(es<=empty_ratio*delta,expit(-es/delta),0.)
-    d = 0.
-    for k in ks: d = d + site_sum(u,k,occupied,operator=op)
+    d,esk = 0.,[]
+    for k in ks:
+        dk,es = site_sum(u,k,occupied,operator=op)
+        d = d + dk ; esk.append(es)
+    # a lattice-periodic shift in hs can occupy states the cut left out,
+    # even with emax above zero
+    require_kept_above(esk,u.hs.intra.shape[0],delta,u.emax,"zero energy, "
+            "the Fermi level of the expectation values,")
     return full2profile(u.hs,d/len(ks)).real
 
 

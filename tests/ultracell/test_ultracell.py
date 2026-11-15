@@ -531,3 +531,23 @@ def test_kpoint_without_kept_states(rebuild):
     d = u.get_dos(energies=np.array([-2.8]),delta=delta,nk=4,
             write=False)[1][0]
     assert abs(np.sum(l)-4*d)<1e-10*abs(4*d)
+
+
+@pytest.mark.parametrize("rebuild",[False,True])
+def test_expectation_values_need_the_states_below_zero(rebuild):
+    """A uniform onsite -1 on the supercell of graphene puts the clean
+    states between 0.5 and 1 below zero energy. With emax=0.5 they are not
+    in the basis, with the clean basis or the rebuilt one (which keeps as
+    many states), so u.get_vev() must raise, as a filling that needs them
+    does in the mean field. With emax=1.5 every occupied state is kept,
+    and since a uniform shift does not mix the states, the occupations
+    must be those of the supercell"""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    hs = h.get_supercell([3,2])
+    hs.add_onsite(-1.0)
+    with pytest.raises(ValueError,match="Fermi level"):
+        h.get_ultracell(hs,emax=0.5,rebuild_basis=rebuild).get_vev(nk=2)
+    v1 = h.get_ultracell(hs,emax=1.5,rebuild_basis=rebuild).get_vev(nk=2)
+    v2 = hs.get_vev(nk=2)
+    assert np.max(np.abs(v1-v2))<1e-8
