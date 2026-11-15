@@ -47,7 +47,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
         compute_anomalous=True, compute_normal=True, maxite=1000,
         T=1e-7, callback_h=None,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, write=None,
-        kpm_prec=None, fermi=None, kpm_radius=None, **kwargs):
+        kpm_prec=None, fermi=None, kpm_radius=None, backend=None, **kwargs):
     """KPM analogue of scftk.densitydensity.generic_densitydensity.
     Only the "plain" mixing solver is implemented (the alternate
     root-finding solvers there are not KPM-specific and are not needed for
@@ -59,7 +59,10 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
     its Fermi level, after callback_h, and whose filling error enters the
     convergence check. kpm_radius truncates the recursion of every
     starting orbital to the sites within that many hops
-    (kpmtk/truncation.py), None for the full recursion."""
+    (kpmtk/truncation.py), None for the full recursion. backend, for a
+    sparse h0, replaces the KPM density matrix by backend.dm(h,needed),
+    the ultracell states of ultracelltk.meanfield.SparseBackend, which is
+    then also the fermi object when a filling is held."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     from .densitydensity import (get_mf, mix_mf, diff_mf, update_hamiltonian,
             hamiltonian2dict, set_hoppings, SCF, random_hermitian_guess,
@@ -99,9 +102,11 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
         norb = h1.intra.shape[0]
         needed = sparsemeanfield.needed_entries(v,norb,has_eh=h0.has_eh)
         def get_dm(h, trace=False):
-            out = get_dm_kpm_sparse(h, needed, nk=nk, scale=scale, npol=npol,
-                    ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace,
-                    radius=kpm_radius)
+            if backend is not None: # no trace: its Fermi level is exact
+                out = backend.dm(h, needed)
+            else: out = get_dm_kpm_sparse(h, needed, nk=nk, scale=scale,
+                    npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec,
+                    trace=trace, radius=kpm_radius)
             dm = out[0] if trace else out
             for d in list(v)+[tuple(-x for x in d) for d in v]: # every one
                 if d not in dm: dm[d] = csr_matrix((norb,norb),dtype=np.complex128)
@@ -189,10 +194,13 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
 
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None,
-        kpm_radius=None, **kwargs):
+        kpm_radius=None, backend=None, **kwargs):
     """KPM analogue of scftk.densitydensity.densitydensity. kpm_radius
     truncates the recursion to that many hops (kpmtk/truncation.py), for
-    the density matrix, the Fermi level and the energy alike"""
+    the density matrix, the Fermi level and the energy alike. backend
+    (ultracelltk.meanfield.SparseBackend) replaces the KPM by the states
+    of an ultracell in the sparse loop, for the density matrix, the Fermi
+    level and the band energy alike; h is then made sparse"""
     from ..checkclass import is_iterable
     if is_iterable(filling): # see VJinteraction's docstring
         raise NotImplementedError("A per-site (array) filling is only "
@@ -206,8 +214,15 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
     from ..kpmtk.truncation import check_radius
     kpm_radius = check_radius(kpm_radius)
     h = h.get_multicell()
+    if backend is not None: h.turn_sparse() # the loop of the sparse engine
     if not h.is_sparse: h = h.get_dense() # a sparse one stays sparse
-    if mu is None:
+    if backend is not None: # the ultracell states, see SparseBackend
+        backend.filling = filling
+        fermi = backend if mu is None else None
+        def callback_h(h):
+            if mu is not None: h.shift_fermi(-mu)
+            return h
+    elif mu is None:
         # the KPM Fermi level, from the trace of the previous iteration's
         # recursion (LaggedFermi), so this never diagonalizes anything,
         # at T, not T=0: the density matrix this Fermi level feeds is built
@@ -225,9 +240,14 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
             return h
     scf = generic_densitydensity_kpm(h, callback_h=callback_h, fermi=fermi,
             verbose=verbose, nk=nk, scale=scale, npol=npol, ne=ne,
-            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius, **kwargs)
+            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius,
+            backend=backend, **kwargs)
     h = scf.hamiltonian
-    if h.is_sparse: # Tr(H rho) from KPM, rather than diagonalizing
+    if backend is not None: # the occupied ultracell levels, at T=0
+        from . import sparsemeanfield as dc # its double countings, below
+        etot = backend.band_energy(h)
+        backend.release()
+    elif h.is_sparse: # Tr(H rho) from KPM, rather than diagonalizing
         from ..kpmtk.densitymatrix_kpm import get_band_energy_kpm
         from . import sparsemeanfield as dc # its double countings, below
         # at T=0, as the sum of the occupied levels the dense engine takes

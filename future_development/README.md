@@ -724,9 +724,10 @@ already reached once.
   November 2026 a spinful ultracell runs on the sparse engine of
   `VJinteraction`, with the exchange `J1` to `Jr` and no dense supercell in
   the loop, one diagonalization per kpoint and iteration (a 2304-orbital
-  call from 30 s to 15 s). Open: the spinless loop on the sparse engine,
-  and two decisions with a recommendation, Nambu with a cut (left until
-  `window=`) and the zero net moment of the paper (a named constraint).
+  call from 30 s to 15 s), and a spinless one on the sparse loop of
+  `densitydensity_kpm`. Open: two decisions with a recommendation, Nambu
+  with a cut (left until `window=`) and the zero net moment of the paper
+  (a named constraint), and stages 3 and 4.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

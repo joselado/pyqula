@@ -88,11 +88,11 @@ class Ultracell():
         the same basis, and its total energy with return_total_energy=True.
 
         A spinful supercell runs on the sparse engine of the spin-spin mean
-        field (scftk.spinspin), whose interaction, density matrix and mean
-        field are sparse matrices, so the loop needs no dense matrix of the
-        supercell; what grows with the size is the ultracell matrix of the
-        kept states. A spinless one runs on the dense loop of
-        scftk.densitydensity.
+        field (scftk.spinspin), a spinless one on the sparse loop of
+        scftk.densitydensity_kpm. Both keep the interaction, the density
+        matrix and the mean field as sparse matrices, so the loop needs no
+        dense matrix of the supercell; what grows with the size is the
+        ultracell matrix of the kept states.
 
         rebuild_basis=True (the default) rebuilds the basis at every
         iteration from the lattice-periodic part of the current

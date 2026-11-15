@@ -343,23 +343,12 @@ def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,shell=None,**kwargs):
     return simplexdm.get_dm(h,ds,nk=nk,T=T,shell=shell,**kwargs)
 
 
-def _get_dm_ultracell(h,v,nk=None,tolerance=None,shell=None,T=None,
-        **kwargs):
-    """integration="ultracell": the supercell h solved in the folded Bloch
-    states of its unit cell, see ultracelltk.meanfield. h must carry them,
-    as the supercells of u.get_mean_field_hamiltonian() do"""
-    from ..ultracelltk.meanfield import get_dm as get_dm_ultracell
-    if nk is None: nk = 1
-    return get_dm_ultracell(h,v,nk=nk,T=T)
-
-
 # the density-matrix backends of the SCF loop, by the name integration=
 # selects them with
 dm_integrations = {
     "ed": _get_dm_ed, # exact diagonalization on the k-mesh
     "qtci": _get_dm_qtci, # triangle on cross-interpolated fields
     "triangle": _get_dm_triangle, # linear simplex integration of the step
-    "ultracell": _get_dm_ultracell, # the folded Bloch states of the unit cell
     }
 
 
@@ -876,9 +865,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     integration = kwargs.get("integration","ed") # density-matrix backend
     check_integration(integration)
     if integration=="qtci": require_hermitian(h,"integration=\"qtci\"")
-    if integration=="ultracell":
-        from ..ultracelltk.meanfield import get_basis
-        get_basis(h) # h must be the supercell of an ultracell
     if integration=="triangle":
         from ..dmtk import simplexdm
         simplexdm.check_hamiltonian(h,"integration=\"triangle\"")
@@ -907,11 +893,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             from ..dmtk import simplexdm
             return simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T,
                     keep_mesh=True)
-        elif integration=="ultracell":
-            # which keeps its states for the density matrix of h shifted
-            # by this level, see ultracelltk.meanfield
-            from ..ultracelltk.meanfield import get_fermi4filling
-            return get_fermi4filling(h,filling,nk=h.nk,T=T,keep=True)
         else: return h.get_fermi4filling(filling,nk=h.nk,T=T)
     # a Bogoliubov-de Gennes h at a filling: the Fermi level is found on
     # the charge of the paired state, as an offset from the one of the
@@ -948,9 +929,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     ds = [(0,0,0)] + [d for d in scf.v if d!=(0,0,0)] # every direction
     if integration=="ed" and not h.has_eh:
         scf.dm = h.get_density_matrix(ds=ds,nk=h.nk,T=T)
-    elif integration=="ultracell": # the same states as the loop
-        from ..ultracelltk.meanfield import get_dm as get_dm_ultracell
-        scf.dm = get_dm_ultracell(h,ds,nk=h.nk,T=T,full=True)
     elif integration=="qtci":
         # get_dm_qtci left every entry the mean field does not read at
         # zero. Recomputed with the same construction, on the same mesh
@@ -984,10 +962,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # the step at the Fermi level, as "ed" and "qtci" sum it
         from ..dmtk import simplexdm
         etot = simplexdm.band_energy(h,nk=h.nk)
-    elif integration=="ultracell": # from the ultracell eigenvalues
-        from ..ultracelltk.meanfield import band_energy, release_states
-        etot = band_energy(h,nk=h.nk) # with the states of scf.dm
-        release_states(h) # the returned Hamiltonian does not carry them
     else:
         etot = h.get_total_energy(nk=h.nk)
     if fermi_level is not None:
@@ -1181,6 +1155,9 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     evaluated once, not a converged answer.
     """
     kwargs = reject_legacy_kwargs(kwargs)
+    if kwargs.get("integration")=="ultracell": # a spinless ultracell
+        return _ultracell_sparse_loop(h,V1=V1,V2=V2,V3=V3,U=U,
+                constrains=constrains,Vr=Vr,rcut=rcut,**kwargs)
     h = h.get_multicell() # multicell Hamiltonian
     h = h.get_dense()
     # define the function
@@ -1210,6 +1187,24 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
             return mf
     return densitydensity(h,v=v,callback_mf=callback_mf,**kwargs)
 
+
+
+def _ultracell_sparse_loop(h,integration=None,**kwargs):
+    """integration="ultracell" for a spinless supercell, which the spinful
+    engine (scftk.spinspin) does not take: the sparse loop of
+    scftk.densitydensity_kpm, with the density matrix, the Fermi level and
+    the band energy from the ultracell states (ultracelltk.meanfield.
+    SparseBackend) instead of the KPM, so that no dense matrix of the
+    supercell is built. nk and T default to those of this module's loop"""
+    from .densitydensity_kpm import Vinteraction_kpm
+    from ..ultracelltk.meanfield import SparseBackend, get_basis
+    get_basis(h) # the supercell of an ultracell, Hermitian, without Nambu
+    h = h.get_multicell()
+    h.turn_sparse()
+    kwargs.setdefault("nk",8) # the defaults of generic_densitydensity
+    kwargs.setdefault("T",1e-7)
+    backend = SparseBackend(nk=kwargs["nk"],T=kwargs["T"])
+    return Vinteraction_kpm(h,backend=backend,**kwargs)
 
 
 from ..meanfield import identify_symmetry_breaking

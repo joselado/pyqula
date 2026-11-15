@@ -162,8 +162,12 @@ ultracell supplies its own numerics with `ultracelltk.meanfield.SparseBackend`, 
 diagonalizes the ultracell once per kpoint and returns the csr density matrix with the
 Fermi level, as `full_dm_accumulate_sparse_with_fermi` does for "ed", and the band energy
 from the same states. A spinful ultracell always takes this engine, so it has `J1`, `J2`,
-`J3`, `Jr` and no dense matrix of the supercell in the loop. A spinless one stays on the
-dense loop of `generic_densitydensity`, since `VJinteraction` is spinful only.
+`J3`, `Jr` and no dense matrix of the supercell in the loop. `VJinteraction` is spinful
+only, so a spinless ultracell takes the sparse loop of `generic_densitydensity_kpm`, with
+the same backend passed as `backend=`: it is there the `fermi=` object of that loop, with
+the interface of `LaggedFermi`, whose Fermi level is exact and whose error is zero. The
+dense route of stage 2, three branches of `scftk/densitydensity.py` and the states kept on
+the Hamiltonian between the Fermi search and the density matrix, is gone.
 
 Tests: the backend's entries against the dense density matrix of the same states to
 $10^{-12}$ at $d$ and $-d$, with and without a cut, and with every state against "ed" on
@@ -176,11 +180,11 @@ $10^{-12}$ by $8\times10^{-11}$. And a staggered moment tilted from $z$, with $U
 relaxes by about 0.5% per iteration in both engines alike, with errors equal to $10^{-14}$
 over 300 iterations, so it is a slow mode of that state and not of the ultracell.
 
-Still open: the spinless loop on the sparse engine of `generic_densitydensity_kpm`, whose
-`fermi=` is already an object that an exact Fermi level fits, and then the removal of the
-three ultracell branches of `scftk/densitydensity.py`; the entry `Vinteraction_kpm` for a
-spinless sparse loop is named after the KPM and would carry the ultracell too. Nambu and
-the constraint are decisions 6 and 7 below. The new wall is the time of the dense `eigh` of
+Two things are worth knowing about this route. The spinless loop goes through
+`Vinteraction_kpm` and `densitydensity_kpm`, which are named after the KPM and now carry the
+ultracell as well, a naming wart rather than a design choice. And a random guess is drawn
+on the pairs the interaction couples only, so the spinless test against "ed" passes one
+explicit guess to both. Nambu and the constraint are decisions 6 and 7 below. The new wall is the time of the dense `eigh` of
 the ultracell matrix, about 5000 kept states, and its eigenvectors, which are quadratic in
 the kept states.
 

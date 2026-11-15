@@ -1,47 +1,36 @@
-"""The ultracell as a density-matrix backend of the mean field,
-integration="ultracell" of scftk.densitydensity.
+"""The ultracell as a backend of the mean field, integration="ultracell".
 
-The self-consistent loop of scftk works on the supercell Hamiltonian, the
-modulated supercell plus the mean field, and needs three things from a
+The self-consistent loops of scftk work on the supercell Hamiltonian, the
+modulated supercell plus the mean field, and need three things from a
 backend: the density matrix at the entries the mean field reads, the Fermi
-level that holds a filling, and the band energy. This module computes the
+level that holds a filling, and the band energy. SparseBackend computes the
 three from the ultracell states instead of the full diagonalization of the
-supercell. The states are written on the supercell orbitals, and the density
+supercell, with one diagonalization of the ultracell per kpoint and
+iteration. The states are written on the supercell orbitals, and the density
 matrix is summed from them with the convention of the "ed" backend (the
-transpose of rho), at the entries the mean field reads, as dense matrices
-for scftk.densitydensity (get_dm) or sparse ones for the sparse engine of
-the spinful mean field (SparseBackend).
+transpose of rho), as csr matrices at the entries asked for, so that the
+loops build no dense matrix of the supercell. A spinful supercell runs on
+the sparse engine of scftk.spinspin (VJinteraction), which has the
+spin-spin exchange, and a spinless one on the sparse loop of
+scftk.densitydensity_kpm.
 
 The supercell Hamiltonian carries the folded basis as the attribute
 ultracell_basis, which u.get_mean_field_hamiltonian() sets and which the
 copies of the loop keep. The basis is the one of the clean unit cell,
-rebuilt at every call from the lattice-periodic part of the current
+rebuilt at every iteration from the lattice-periodic part of the current
 Hamiltonian when basis.rebuild is set, the default of
 u.get_mean_field_hamiltonian(), or frozen to the clean unit cell otherwise
 (see basis.FoldedBasis.rebuilt and future_development/ultra_long_range.md,
 decision 5).
-
-Each iteration diagonalizes the ultracell once per kpoint. The loop finds
-the Fermi level on h and then asks for the density matrix of h shifted by
-it, and a uniform shift leaves the eigenvectors as they are, so the search
-keeps its states on h (get_fermi4filling(keep=True)), and get_dm and
-band_energy take them as long as h has changed by a shift only. The loop
-releases them (release_states) before the Hamiltonian leaves it.
 """
 
 import numpy as np
-from copy import copy
 from scipy.linalg import eigh
-from scipy.sparse import issparse, csr_matrix
+from scipy.sparse import csr_matrix
 from numba import jit, prange
 
 from .basis import pad3
 from .matrix import ultracell_matrix, real_space_states
-
-# above this the states of the Fermi search are not kept for the density
-# matrix, which then diagonalizes again, as in
-# densitymatrix.full_dm_accumulate_sparse_with_fermi
-max_memory_gb = 2.0
 
 # a state above the Fermi level by this many times the smearing has an
 # occupation below exp(-50), 2e-22, and is left out of the density matrix
@@ -104,8 +93,6 @@ class MeshStates():
             self.es.append(es) ; self.vs.append(vs)
             self.Us.append(U) ; self.valid.append(valid)
         self.shift = 0. # added to every eigenvalue, see shifted()
-    def nbytes(self):
-        return sum(v.nbytes + U.nbytes for (v,U) in zip(self.vs,self.Us))
     def eigenvalues(self):
         return [es + self.shift for es in self.es]
     def real_space(self,ik,emax=None):
@@ -122,72 +109,6 @@ class MeshStates():
         C = C.reshape(N,bmax,len(es))
         Phi = real_space_states(self.basis,self.ks[ik],C,self.Us[ik])
         return es,np.ascontiguousarray(Phi)
-
-
-def matrix_stamp(h):
-    """The matrices of h, to tell later whether h changed"""
-    return (h.intra,[t.m for t in h.hopping])
-
-
-def uniform_shift(h,stamp):
-    """The constant c with h = h(stamp) + c, or None if h changed in any
-    other way"""
-    from scipy.sparse import identity
-    intra0,hops0 = stamp
-    hops = [t.m for t in h.hopping]
-    if len(hops)!=len(hops0) or any(a is not b for a,b in zip(hops,hops0)):
-        return None # a hopping was replaced
-    d = h.intra - intra0
-    if issparse(d):
-        c = np.mean(d.diagonal()).real
-        rest = (d - c*identity(d.shape[0],format="csr")).tocoo().data
-    else:
-        rest = np.array(d)
-        c = np.mean(np.diag(rest)).real
-        rest[np.diag_indices_from(rest)] -= c
-    if rest.size>0 and np.max(np.abs(rest))>1e-10: return None
-    return c
-
-
-def keep_states(h,states):
-    """Keep the states on h for the next call on the same h, unless they
-    take more than max_memory_gb"""
-    if states.nbytes()<max_memory_gb*1e9:
-        h._ultracell_states = (matrix_stamp(h),states)
-
-
-def kept_states(h,nk):
-    """The states h keeps from an earlier call on this mesh, if h has only
-    been shifted by a constant since, with their eigenvalues shifted to
-    match; None otherwise"""
-    kept = h.__dict__.get("_ultracell_states",None)
-    if kept is None: return None
-    stamp,states = kept
-    c = uniform_shift(h,stamp)
-    if c is None or not np.array_equal(states.ks,
-            np.array(h.geometry.get_kmesh(nk=nk))): # not those of this mesh
-        release_states(h)
-        return None
-    states = copy(states) # the same vectors, the eigenvalues of h
-    states.shift = states.shift + c
-    keep_states(h,states) # stamped with the matrices of h
-    return states
-
-
-def release_states(h):
-    """Drop the states h keeps, so that a Hamiltonian that leaves the loop
-    does not carry them"""
-    h.__dict__.pop("_ultracell_states",None)
-
-
-def mesh_states(h,nk):
-    """The ultracell states of h on the mesh, those h keeps or new ones,
-    which h then keeps"""
-    states = kept_states(h,nk)
-    if states is None:
-        states = MeshStates(h,nk=nk)
-        keep_states(h,states)
-    return states
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -255,38 +176,26 @@ def dm_full(states,ds,delta):
     return out
 
 
-def get_dm(h,v,nk=1,T=None,full=False):
-    """Density matrix of the supercell h in its ultracell states, one
-    (n,n) matrix per direction of v (a dict, or a list of directions with
-    full=True), with every state below zero energy occupied with the
-    Fermi-Dirac weight of temperature T, as integration="ed" builds it.
-    Without full, only the entries the mean field reads are computed"""
-    from ..scftk.densitydensity import dm_sparse_pairs
-    get_basis(h) # check that h is the supercell of an ultracell
-    delta = smearing(T)
-    ds = [(0,0,0)] + [tuple(d) for d in v if tuple(d)!=(0,0,0)]
-    n = h.intra.shape[0]
-    states = mesh_states(h,nk) # those of the Fermi search, if kept
-    if full: return dm_full(states,ds,delta)
-    pairs = dm_sparse_pairs(v,ds,n,has_spin=h.has_spin)
-    vals = dm_entries(states,pairs,delta)
-    outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
-    for d,(rows,cols) in pairs.items(): outd[d][rows,cols] = vals[d]
-    return outd
-
-
 class SparseBackend():
-    """The ultracell backend of the sparse engine of the spinful mean
-    field (scftk.spinspin._run_anisotropic_scf with integration=
-    "ultracell"): the density matrix at the entries the mean field reads,
-    as csr matrices, with the Fermi level that holds a filling, and the
-    band energy, from one diagonalization of the ultracell per kpoint and
-    iteration. It keeps the states of the last density matrix, for the
-    band energy of the same Hamiltonian"""
-    def __init__(self,nk=1,T=None):
+    """The ultracell backend of the sparse engines of the mean field: the
+    density matrix at the entries the mean field reads, as csr matrices,
+    with the Fermi level that holds a filling, and the band energy, from
+    one diagonalization of the ultracell per kpoint and iteration. It
+    keeps the states of the last Hamiltonian it solved, for the density
+    matrix and the band energy of that same Hamiltonian.
+
+    The spinful loop (scftk.spinspin._run_anisotropic_scf) calls
+    dm_with_fermi, or dm after its own shift by mu. The spinless loop
+    (scftk.densitydensity_kpm.generic_densitydensity_kpm) takes it as its
+    fermi object, the interface of kpmtk.densitymatrix_kpm.LaggedFermi:
+    shift(h) finds the Fermi level of h at self.filling exactly and shifts
+    h by it, so its error is zero, and dm(h) then takes the same states"""
+    def __init__(self,nk=1,T=None,filling=None):
         self.nk = nk
         self.T = 0. if T is None else T # of the Fermi search
         self.delta = smearing(T) # of the occupations
+        self.filling = filling # for shift()
+        self.error = 0. # the Fermi level is exact, see shift()
         self.release()
     def release(self):
         """Drop the states kept"""
@@ -310,9 +219,21 @@ class SparseBackend():
         return self.entries(needed),fermi
     def dm(self,h,needed):
         """The density matrix of h, already shifted by its chemical
-        potential"""
-        self.solve(h)
+        potential, from the states of shift() if they were those of h"""
+        if h is not self.h: self.solve(h)
         return self.entries(needed)
+    def shift(self,h):
+        """h shifted by its Fermi level at self.filling, which h.fermi
+        keeps; the states stay for dm(h)"""
+        states = self.solve(h)
+        fermi = fermi_level(states.eigenvalues(),states.n,self.filling,
+                T=self.T)
+        states.shift = -fermi # the eigenvalues of the shifted h
+        h.fermi = fermi
+        h.shift_fermi(-fermi) # the eigenvectors are unaffected
+        return h
+    def wants_trace(self,h): return False # no lagged level to move
+    def update(self,h,trace): pass
     def band_energy(self,h):
         """Sum of the eigenvalues of h below zero energy, the occupied
         states at T=0, averaged over the mesh, as h.get_total_energy() for
@@ -338,21 +259,3 @@ def fermi_level(esk,n,filling,T=0.):
     top = max(np.max(e) for e in esk) + 100. # above every kept state
     es = np.concatenate(esk + [np.full(total-kept,top)])
     return get_fermi_energy_T(es,filling,T=T)
-
-
-def get_fermi4filling(h,filling,nk=1,T=0.,keep=False):
-    """Fermi level of the supercell h that holds filling, a fraction of all
-    the states of the supercell, from the ultracell eigenvalues. With keep,
-    h keeps the states for the density matrix that the loop asks next, on
-    h shifted by this level, unless they take more than max_memory_gb"""
-    states = MeshStates(h,nk=nk)
-    fermi = fermi_level(states.eigenvalues(),states.n,filling,T=T)
-    if keep: keep_states(h,states)
-    return fermi
-
-
-def band_energy(h,nk=1):
-    """Sum of the ultracell eigenvalues below zero energy, averaged over the
-    mesh of spectrum.total_energy, its counterpart for "ed\""""
-    esk = mesh_states(h,nk).eigenvalues()
-    return np.mean([np.sum(e[e<0.]) for e in esk])

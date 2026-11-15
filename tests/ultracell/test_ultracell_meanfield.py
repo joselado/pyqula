@@ -58,13 +58,18 @@ def test_bond_interaction_every_state_is_the_supercell():
     hs = h.get_supercell(n)
     hs.add_onsite(lambda r: 0.3*np.cos(2*np.pi*r[0]/n))
     u = h.get_ultracell(hs)
-    kw = dict(V1=1.5,filling=0.5,mf="random",nk=4,maxerror=1e-10,verbose=0,
-            write=False)
+    # one random guess for both, since the sparse loop of the ultracell
+    # draws a random guess on the pairs the interaction couples only
+    from scipy.sparse import csr_matrix
+    from pyqula.scftk.densitydensity import random_hermitian_guess
     np.random.seed(3)
-    u2,e2 = u.get_mean_field_hamiltonian(return_total_energy=True,**kw)
-    np.random.seed(3)
+    mf = random_hermitian_guess({(0,0,0):0,(1,0,0):0,(-1,0,0):0},
+            hs.intra.shape,scale=0.3)
+    kw = dict(V1=1.5,filling=0.5,nk=4,maxerror=1e-11,verbose=0,write=False)
+    u2,e2 = u.get_mean_field_hamiltonian(return_total_energy=True,
+            mf={d: csr_matrix(m) for d,m in mf.items()},**kw)
     h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
-            integration="ed",**kw)
+            integration="ed",mf=mf,**kw)
     assert abs(e2-e3)<1e-8
     assert same_state(u2,h3,k=(0.37,0.,0.))<1e-7
 
@@ -235,7 +240,8 @@ def test_sparse_backend_reads_the_density_matrix(emax):
     level of the same filling"""
     from pyqula.scftk import sparsemeanfield
     from pyqula.ultracelltk.basis import FoldedBasis
-    from pyqula.ultracelltk.meanfield import SparseBackend, get_dm
+    from pyqula.ultracelltk.meanfield import (SparseBackend, MeshStates,
+            dm_full, smearing)
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian()
     h.add_rashba(0.2)
@@ -253,7 +259,7 @@ def test_sparse_backend_reads_the_density_matrix(emax):
     b = SparseBackend(nk=2,T=1e-7)
     dm,fermi = b.dm_with_fermi(hs,needed,0.5)
     h2 = hs.copy() ; h2.shift_fermi(-fermi)
-    full = get_dm(h2,list(needed),nk=2,full=True)
+    full = dm_full(MeshStates(h2,nk=2),list(needed),smearing(1e-7))
     for d,(r,c) in needed.items():
         assert np.max(np.abs(dm[d].toarray()[r,c]-full[d][r,c]))<1e-12
     if emax is None: # the supercell itself
