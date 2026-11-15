@@ -41,6 +41,25 @@ mf_file = "MF.pkl"  # same filename densitydensity.py uses
 # import first.
 
 
+# the keywords that tune the Chebyshev expansion of the density matrix. A
+# loop that computes its density matrix in another way (exact
+# diagonalization, the states of an ultracell) refuses them, since they
+# would have no effect there; None is the default of each one
+KPM_KEYWORDS = ("scale", "npol", "ne", "cores", "kpm_prec", "kpm_radius")
+
+
+def refuse_kpm_keywords(given, integration):
+    """Raise a TypeError if any of the KPM keywords (KPM_KEYWORDS) in the
+    dictionary given {name: value} was passed, i.e. is not None, to a loop
+    whose density matrix comes from integration, which does not use them"""
+    passed = [k for k in KPM_KEYWORDS if given.get(k) is not None]
+    if passed:
+        raise TypeError("the keyword(s) %s tune the Chebyshev expansion of "
+                "integration=\"kpm\" and have no effect with integration=%r, "
+                "which does not use it; leave them out, or use "
+                "integration=\"kpm\"" % (", ".join(passed), integration))
+
+
 def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
         maxerror=1e-5, callback_mf=None, callback_dm=None, load_mf=True,
         compute_cross=True, compute_dd=True, verbose=1,
@@ -193,14 +212,21 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
 
 
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
-        scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None,
+        scale=None, npol=None, ne=None, cores=None, kpm_prec=None,
         kpm_radius=None, backend=None, **kwargs):
-    """KPM analogue of scftk.densitydensity.densitydensity. kpm_radius
-    truncates the recursion to that many hops (kpmtk/truncation.py), for
-    the density matrix, the Fermi level and the energy alike. backend
+    """KPM analogue of scftk.densitydensity.densitydensity. npol=None is
+    kpmtk.densitymatrix_kpm.DEFAULT_NPOL. kpm_radius truncates the
+    recursion to that many hops (kpmtk/truncation.py), for the density
+    matrix, the Fermi level and the energy alike. backend
     (ultracelltk.meanfield.SparseBackend) replaces the KPM by the states
     of an ultracell in the sparse loop, for the density matrix, the Fermi
-    level and the band energy alike; h is then made sparse"""
+    level and the band energy alike; h is then made sparse, and the KPM
+    keywords (scale, npol, ne, cores, kpm_prec, kpm_radius) raise a
+    TypeError, since nothing would use them"""
+    if backend is not None: # integration="ultracell", see Vinteraction
+        refuse_kpm_keywords(dict(scale=scale, npol=npol, ne=ne, cores=cores,
+                kpm_prec=kpm_prec, kpm_radius=kpm_radius), "ultracell")
+    if npol is None: npol = DEFAULT_NPOL
     from ..checkclass import is_iterable
     if is_iterable(filling): # see VJinteraction's docstring
         raise NotImplementedError("A per-site (array) filling is only "

@@ -549,7 +549,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     double on the CPU (kpmtk.densitymatrix_kpm.resolve_kpm_prec);
     kpm_radius truncates the recursion of every starting orbital to the
     sites within that many hops (kpmtk/truncation.py), None for the full
-    recursion; all six are unused when integration="ed".
+    recursion. integration="ed" and "ultracell" do not use any of the six,
+    so passing one of them there raises a TypeError.
 
     NOTE: unlike the "ed" path, scf.dm after convergence under
     integration="kpm" only holds the sparse subset of entries the SCF loop
@@ -708,6 +709,12 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 "Pass use_jax=True to choose a solver; the accepted ones "
                 "are %s" % (jax_only_set, ", ".join(repr(s) for s in
                 get_jax_solver_names())))
+    # the same for the KPM keywords, which only integration="kpm" uses
+    # (an unknown integration is refused by _run_anisotropic_scf)
+    if integration in _INTEGRATIONS and integration != "kpm":
+        from .densitydensity_kpm import refuse_kpm_keywords
+        refuse_kpm_keywords(dict(scale=scale, npol=npol, ne=ne, cores=cores,
+                kpm_prec=kpm_prec, kpm_radius=kpm_radius), integration)
     T = 1e-7 if T is _T_UNSET else T
     mix = 0.3 if mix is None else mix # the plain-mixing factor
     maxite = 1000 if maxite is _MAXITE_UNSET else maxite
