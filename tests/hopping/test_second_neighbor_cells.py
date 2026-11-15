@@ -96,3 +96,49 @@ def test_kane_mele_tolerance_reaches_every_bond():
     e0 = eigh(dense(h.get_hk_gen()(k)), eigvals_only=True)
     assert np.max(np.abs(eB - e0)) > 1e-3 # the coupling is there
     assert np.max(np.abs(eA - eB)) < 1e-10
+
+
+SHEAR2 = [[1, 0, 0], [2, 1, 0], [0, 0, 1]]
+
+
+def added_spectrum(h, add, k):
+    """The spectrum of the coupling that add(h) puts in h, at k"""
+    h1 = h.copy()
+    add(h1)
+    dk = dense(h1.get_hk_gen()(k)) - dense(h.get_hk_gen()(k))
+    return eigh(dk, eigvals_only=True), h1
+
+
+def non_reduced_single_cell(add, has_spin):
+    """The coupling of add on the unit cell of the honeycomb lattice and on
+    the cell a1' = a1, a2' = a2 + 2 a1, both in the single-cell storage of
+    2d (intra, tx, ty, txy, txmy, which hold the cells with |n_k| <= 1).
+    The non-reduced cell has the same two sites, and its second neighbor
+    a2 sits in the cell (-2,1), outside that storage. Only the lattice
+    vectors are changed: the first-neighbor hoppings are the same on both
+    sides of the difference, so the spectrum compared is the one of the
+    coupling alone"""
+    h0 = geometry.honeycomb_lattice().get_hamiltonian(has_spin=has_spin)
+    assert not h0.is_multicell
+    hs = h0.copy()
+    hs.geometry.a2 = hs.geometry.a2 + 2.*hs.geometry.a1
+    kS = np.array([0.13, 0.37, 0.])
+    p = np.linalg.inv(np.array(SHEAR2, dtype=float))@kS # the momentum of h0
+    e1, h1 = added_spectrum(h0, add, p)
+    es, hs = added_spectrum(hs, add, kS)
+    assert not h1.is_multicell # every bond of the unit cell fits there
+    assert hs.is_multicell # the bond in (-2,1) did not
+    assert np.max(np.abs(e1)) > 1e-2 # the coupling is there
+    return np.max(np.abs(e1 - es))
+
+
+def test_kane_mele_on_a_non_reduced_single_cell():
+    """The single-cell storage dropped the second neighbors in (-2,1) and
+    (2,-1), two of the six"""
+    add = lambda h: h.add_kane_mele(0.05)
+    assert non_reduced_single_cell(add, has_spin=True) < 1e-10
+
+
+def test_haldane_on_a_non_reduced_single_cell():
+    add = lambda h: h.add_haldane(0.1)
+    assert non_reduced_single_cell(add, has_spin=False) < 1e-10
