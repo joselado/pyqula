@@ -40,9 +40,10 @@ def kdos_bands(u,kpath=None,energies=np.linspace(-3.0,3.0,200),delta=0.01,
     zone, from the weight of each ultracell state on the folded momentum
     equal to the point of the path, sum_m |c_{q=0,m}|^2, which is the weight
     per unit cell. Returns the three columns of h.get_kdos_bands(): position
-    along the path, energy and spectral function. The states of the unit
-    cell above emax are not in the basis, so energies above emax carry no
-    weight"""
+    along the path, energy and spectral function. Only the states inside
+    the window (emin,emax) are solved, so energies outside it carry no
+    weight: the states above emax are not in the basis, and the frozen
+    states below emin are not drawn"""
     from ..kdos import write_kdos_bands
     write = filewrite.resolve(write,True) # the call, else the global switch
     check_delta(delta)
@@ -69,8 +70,9 @@ def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
     mesh of the unit cell with as many momenta as the folded mesh, N times
     the kpoints of the ultracell, the same number in every direction. For
     the sqrt3 x sqrt3 cell of graphene and nk=10 this is 300 momenta, about
-    17 per direction. Energies above emax carry no weight, since those
-    states are not in the basis"""
+    17 per direction. Energies outside the window (emin,emax) carry no
+    weight: the states above emax are not in the basis, and the frozen
+    states below emin are not drawn"""
     from ..dos import write_dos
     write = filewrite.resolve(write,True) # the call, else the global switch
     ks = ultracell_kmesh(u,nk)
@@ -88,12 +90,13 @@ def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
     return (energies,ys)
 
 
-def site_sum(u,kS,weight,operator=None):
+def site_sum(u,kS,weight,operator=None,frozen=False):
     """sum_s weight(e_s) |Phi_s(a)|^2 on every orbital a of the supercell,
     or with Re[conj(Phi_s(a)) (O Phi_s)(a)] for an operator matrix O, over
     the eigenstates at kS whose weight is not zero, a chunk of states at a
-    time. Returns it and the eigenvalues at kS"""
-    es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
+    time. Returns it and the eigenvalues at kS, and with frozen=True also
+    the frozen states (Ef,Uf,validf) of the same basis states"""
+    es,vs,U,valid,*fz = eigenstates(u.basis,u.hk(kS),kS,frozen=frozen)
     w = weight(es)
     # the states with a weight, taken a chunk of columns at a time, so
     # that only a chunk of the eigenvectors is copied and not all of them
@@ -105,6 +108,7 @@ def site_sum(u,kS,weight,operator=None):
         if operator is None: w2 = np.abs(Phi)**2
         else: w2 = np.real(np.conjugate(Phi)*np.asarray(operator@Phi))
         out += w2@w[sl]
+    if frozen: return out,es,tuple(fz)
     return out,es
 
 
@@ -112,8 +116,9 @@ def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
     """Local density of states per site of the supercell at energy e,
     averaged over an nk mesh of the ultracell's Brillouin zone, with the
     normalization of hs.get_ldos(mode="diagonalization"). Returns x, y and
-    the value on each site. Energies above emax carry no weight, since those
-    states are not in the basis"""
+    the value on each site. Energies outside the window (emin,emax) carry
+    no weight: the states above emax are not in the basis, and the frozen
+    states below emin are not drawn"""
     from ..ldos import write_ldos
     from ..increase_hilbert import full2profile
     write = filewrite.resolve(write,True) # the call, else the global switch
@@ -137,11 +142,16 @@ def vev(u,operator=None,nk=10):
     occupied. Without an operator it is the occupation of each site, as
     hs.get_vev(). It needs every occupied state in the basis, so emax must
     be above zero, and with a cut zero energy must lie below the highest
-    kept state of hs, as meanfield.fermi_level requires of a filling"""
+    kept state of hs, as meanfield.fermi_level requires of a filling. The
+    frozen states below emin are full and add their part, the frozen
+    density matrix of meanfield.frozen_entries at the entries of the
+    operator; every one of them must lie below zero energy by
+    meanfield.empty_ratio smearings in hs"""
     from scipy.special import expit
     from ..densitymatrix import default_smearing, nonzero_smearing
     from ..increase_hilbert import full2profile
-    from .meanfield import empty_ratio, require_kept_above
+    from .meanfield import (empty_ratio, require_kept_above,
+            require_frozen_below, periodic_part, frozen_levels)
     if u.hs.has_eh:
         raise NotImplementedError("expectation values of the ultracell are "
                 "not implemented for a Hamiltonian with the electron-hole "
@@ -166,15 +176,41 @@ def vev(u,operator=None,nk=10):
     delta = nonzero_smearing(default_smearing(u.hs))
     def occupied(es): # empty from empty_ratio smearings above zero
         return np.where(es<=empty_ratio*delta,expit(-es/delta),0.)
-    d,esk = 0.,[]
+    hp = periodic_part(u.basis,u.hs) # the energies of the frozen states
+    d,esk,efk,frozen = 0.,[],[],[]
     for k in ks:
-        dk,es = site_sum(u,k,occupied,operator=op)
+        dk,es,(Ef,Uf,validf) = site_sum(u,k,occupied,operator=op,
+                frozen=True)
         d = d + dk ; esk.append(es)
+        frozen.append(Uf) ; efk.append(frozen_levels(u.basis,k,Ef,Uf,validf,hp))
+    nfrozen = sum(len(e) for e in efk)
     # a lattice-periodic shift in hs can occupy states the cut left out,
-    # even with emax above zero
-    require_kept_above(esk,u.hs.intra.shape[0],delta,u.emax,"zero energy, "
-            "the Fermi level of the expectation values,")
-    return full2profile(u.hs,d/len(ks)).real
+    # even with emax above zero, or empty frozen ones
+    what = "zero energy, the Fermi level of the expectation values,"
+    require_kept_above(esk,u.hs.intra.shape[0],delta,u.emax,what,
+            nfrozen=nfrozen)
+    require_frozen_below(efk,delta,u.emin,what)
+    d = d/len(ks)
+    if nfrozen>0: d = d + frozen_site_sum(u,ks,frozen,op)
+    return full2profile(u.hs,d).real
+
+
+def frozen_site_sum(u,ks,frozen,operator=None):
+    """The part of the frozen states in site_sum averaged over the mesh
+    ks, on every orbital a: Re sum_b O[a,b] dmf[(0,0,0)][a,b] with dmf the
+    frozen density matrix (meanfield.frozen_entries), elementwise because
+    dm is the transpose of rho, or Re dmf[(0,0,0)][a,a] without an
+    operator. frozen holds the frozen vectors Uf of every kpoint"""
+    from scipy.sparse import coo_matrix
+    from .meanfield import frozen_entries
+    n = u.hs.intra.shape[0]
+    if operator is None:
+        r = np.arange(n) ; c = r ; o = np.ones(n)
+    else:
+        m = coo_matrix(operator)
+        r,c,o = m.row,m.col,m.data
+    v = frozen_entries(u.basis,ks,frozen,{(0,0,0): (r,c)})[(0,0,0)]
+    return np.bincount(r,weights=np.real(o*v),minlength=n)
 
 
 def harmonics(u,values):

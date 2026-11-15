@@ -19,9 +19,10 @@ written on the orbitals of the supercell as
 
 with u_m(p) the eigenvectors of the unit cell's h.get_hk_gen() at p, in
 pyqula's lattice gauge. The method keeps, at each folded momentum, the
-states with energy up to emax, and solves the modulated supercell in that
-basis (Rayleigh-Ritz). With every state kept the basis spans the whole
-supercell and the result is exact.
+states inside a window (emin,emax), and solves the modulated supercell in
+that basis (Rayleigh-Ritz). The states below emin are frozen, occupied and
+not solved, and those above emax are dropped. With every state kept the
+basis spans the whole supercell and the result is exact.
 
 This module holds the bookkeeping: which cell R and which unit-cell orbital
 alpha every orbital of the supercell is, the unit-cell states at the folded
@@ -107,12 +108,20 @@ def supercell_shape(M,dim):
     return M3,P,Q,n
 
 
-def cut_window(e,emax,tol=1e-7):
-    """Indexes of the sorted levels e kept by the cut e <= emax, completed
-    so that a degenerate level is kept whole: a level split by the cut
-    would leave an arbitrary part of its subspace in the basis"""
-    if emax is None: return np.arange(len(e))
-    return np.arange(complete_level(e,int(np.sum(e<=emax)),tol=tol))
+def window_range(e,emin=None,emax=None,tol=1e-7):
+    """The range [i0,i1) of the sorted levels e inside the window
+    (emin,emax): the i0 levels below emin are frozen, the levels from i1 on
+    are dropped, and either side is open when it is None. Both edges are
+    tolerant, by tol relative to the edge, and both are completed outward,
+    so that a degenerate level split by an edge is kept whole: a level
+    split by the cut would leave an arbitrary part of its subspace in the
+    basis. For a spectrum with e(-p) = -e(p) reversed, the particle-hole
+    symmetry of a BdG Hamiltonian, the window (-x,x) gives at -p the
+    mirror of the range at p, i1(-p) = len(e) - i0(p)"""
+    i0 = 0 if emin is None else int(np.sum(e<emin-tol*max(1.,abs(emin))))
+    i1 = len(e) if emax is None else \
+            int(np.sum(e<=emax+tol*max(1.,abs(emax))))
+    return lower_level(e,i0,tol=tol),complete_level(e,i1,tol=tol)
 
 
 def complete_level(e,nkeep,tol=1e-7):
@@ -121,6 +130,47 @@ def complete_level(e,nkeep,tol=1e-7):
     while 0<nkeep<len(e) and abs(e[nkeep]-e[nkeep-1])<tol*max(1.,abs(e[nkeep])):
         nkeep += 1 # the next level is degenerate with the last one kept
     return nkeep
+
+
+def lower_level(e,nfrozen,tol=1e-7):
+    """The number of sorted levels e to freeze, nfrozen lowered so that the
+    first kept level is not split from the last frozen one; the mirror of
+    complete_level, with the tolerance taken on the level that moves"""
+    while 0<nfrozen<len(e) and \
+            abs(e[nfrozen]-e[nfrozen-1])<tol*max(1.,abs(e[nfrozen-1])):
+        nfrozen -= 1 # the last frozen level is degenerate with the next one
+    return nfrozen
+
+
+def energy_or_none(x,name):
+    """x as a float, or None; anything else is a TypeError"""
+    if x is None: return None
+    try:
+        if isinstance(x,str): raise TypeError # float("1") would take it
+        return float(x)
+    except (TypeError,ValueError):
+        raise TypeError(name+" must be a number or None, got "+repr(x))
+
+
+def parse_window(emax=None,window=None):
+    """The window (emin,emax) of an ultracell, from emax= or from
+    window=(emin,emax), with None for an open side. emax=x is the window
+    (None,x)"""
+    if emax is not None and window is not None:
+        raise ValueError("give the cut as emax= or as window=(emin,emax), "
+                "not both; got emax="+repr(emax)+" and window="+repr(window))
+    emin = None
+    if window is not None:
+        try: emin,emax = window
+        except (TypeError,ValueError):
+            raise TypeError("window must be a pair (emin,emax) of numbers "
+                    "or None, got "+repr(window))
+    emin = energy_or_none(emin,"emin")
+    emax = energy_or_none(emax,"emax")
+    if emin is not None and emax is not None and emin>=emax:
+        raise ValueError("the window (emin,emax) needs emin < emax, got "
+                +repr((emin,emax)))
+    return emin,emax
 
 
 class HoppingSum():
@@ -155,8 +205,11 @@ def eigh_momenta(hsum,ps,chunk=2**22):
 
 
 class FoldedBasis():
-    """Bookkeeping of the folded Bloch basis of a supercell hs of h"""
-    def __init__(self,h,hs,emax=None):
+    """Bookkeeping of the folded Bloch basis of a supercell hs of h, with
+    the window (emin,emax) of parse_window: at every folded momentum the
+    sorted levels split into the frozen ones below emin, the kept ones and
+    the dropped ones above emax"""
+    def __init__(self,h,hs,emax=None,window=None):
         from ..unfolding import get_supercell_map
         if h.has_spin!=hs.has_spin or h.has_eh!=hs.has_eh:
             raise ValueError("the supercell and the unit cell must have the "
@@ -217,15 +270,15 @@ class FoldedBasis():
         # momenta, in C order
         self.hop0 = HoppingSum(h.get_multihopping().get_dict(),self.norb,
                 dim=self.dimensionality) # Bloch Hamiltonian of the unit cell
-        if emax is not None:
-            try: emax = float(emax)
-            except (TypeError,ValueError):
-                raise TypeError("emax must be a number or None, got "
-                        +repr(emax))
-        self.emax = emax
+        self.emin,self.emax = parse_window(emax,window)
+        self.window = (self.emin,self.emax)
         self.rebuild = False # the clean states, see states()
         self.hopp = None # the lattice-periodic part, see rebuilt()
-        self._counts = {} # states kept by the clean cut, per kS
+        self._ranges = {} # the ranges of the clean window, per kS
+    @property
+    def has_cut(self):
+        """Whether the window leaves out states on either side"""
+        return self.emin is not None or self.emax is not None
     def folded_momenta(self,kS):
         """The N momenta p_q = M^-1 (k_S+q) = Q diag(1/n) (P k_S + P q), in
         reduced coordinates of the unit cell, one row per q, which is
@@ -241,7 +294,7 @@ class FoldedBasis():
         cut both bases span every orbital, and the copy keeps the clean
         states"""
         b = copy(self)
-        if self.emax is not None:
+        if self.has_cut:
             b.hopp = HoppingSum(self.periodic_hoppings(hs),self.norb,
                     dim=self.dimensionality)
         return b
@@ -270,32 +323,47 @@ class FoldedBasis():
                 key = tuple(key)
                 out[key] = out.get(key,0.) + t.toarray()
         return out
-    def states(self,kS):
+    def states(self,kS,frozen=False):
         """The states kept at every folded momentum, padded to the largest
         number kept: energies (N,bmax), vectors (N,norb,bmax), and the mask
         (N,bmax) of the ones that exist. They are the states of the clean
         unit cell, or, for a basis made by rebuilt() with a cut, those of
-        the lattice-periodic part of the supercell"""
-        if self.hopp is not None: return self.rebuilt_states(kS)
-        return self.clean_states(kS)
-    def counts(self,kS):
-        """Number of states the clean cut keeps at every folded momentum"""
+        the lattice-periodic part of the supercell. With frozen=True the
+        frozen states below the window follow, padded the same way, as
+        three more arrays (Ef,Uf,validf); they come from the same
+        diagonalization as the kept ones, so that the two sets are
+        orthogonal and the density matrix of both is a projector"""
+        if self.hopp is not None: # the lattice-periodic part, see rebuilt()
+            e,w = eigh_momenta(self.hopp,self.folded_momenta(kS))
+            ranges = self.rebuilt_ranges(kS,e)
+        else:
+            e,w = eigh_momenta(self.hop0,self.folded_momenta(kS))
+            ranges = [window_range(e[iq],self.emin,self.emax)
+                    for iq in range(self.N)]
+        out = self.pad([e[iq,i0:i1] for iq,(i0,i1) in enumerate(ranges)],
+                [w[iq,:,i0:i1] for iq,(i0,i1) in enumerate(ranges)])
+        if not frozen: return out
+        return out + self.pad([e[iq,0:i0] for iq,(i0,i1) in enumerate(ranges)],
+                [w[iq,:,0:i0] for iq,(i0,i1) in enumerate(ranges)])
+    def clean_ranges(self,kS):
+        """The ranges [i0,i1) of the window on the levels of the clean unit
+        cell at every folded momentum of kS, computed once per kS"""
         key = tuple(np.round(pad3(kS),12))
-        if key not in self._counts:
-            self._counts[key] = np.sum(self.clean_states(kS)[2],axis=1)
-        return self._counts[key]
-    def rebuilt_states(self,kS):
-        """The states of the lattice-periodic part, as many per momentum as
-        the cut keeps in the clean unit cell, completed so that a
-        degenerate level is kept whole. A lattice-periodic part of the
-        modulation or of a mean field (a uniform moment, a uniform shift)
-        is then in the basis, and does not have to be built from the states
-        the cut leaves out"""
-        e,w = eigh_momenta(self.hopp,self.folded_momenta(kS))
-        counts = self.counts(kS)
-        cs = [complete_level(e[iq],int(counts[iq])) for iq in range(self.N)]
-        return self.pad([e[iq,0:c] for iq,c in enumerate(cs)],
-                [w[iq,:,0:c] for iq,c in enumerate(cs)])
+        if key not in self._ranges:
+            e = eigh_momenta(self.hop0,self.folded_momenta(kS))[0]
+            self._ranges[key] = [window_range(e[iq],self.emin,self.emax)
+                    for iq in range(self.N)]
+        return self._ranges[key]
+    def rebuilt_ranges(self,kS,e):
+        """The ranges of the levels e (N,norb) of the lattice-periodic part
+        at the folded momenta of kS: as many frozen and as many kept states
+        per momentum as the window holds in the clean unit cell, both edges
+        completed outward so that a degenerate level is kept whole. A
+        lattice-periodic part of the modulation or of a mean field (a
+        uniform moment, a uniform shift) is then in the basis, and does
+        not have to be built from the states the cut leaves out"""
+        return [(lower_level(e[iq],i0),complete_level(e[iq],i1))
+                for iq,(i0,i1) in enumerate(self.clean_ranges(kS))]
     def pad(self,es,ws):
         """Pad the states of every folded momentum to the largest number.
         When the cut keeps no state at any folded momentum of this kS the
@@ -308,13 +376,6 @@ class FoldedBasis():
             b = len(es[i])
             E[i,0:b] = es[i] ; U[i,:,0:b] = ws[i] ; valid[i,0:b] = True
         return E,U,valid
-    def clean_states(self,kS):
-        """The states of the clean unit cell up to emax at every folded
-        momentum, padded as in states()"""
-        e,w = eigh_momenta(self.hop0,self.folded_momenta(kS))
-        idx = [cut_window(e[iq],self.emax) for iq in range(self.N)]
-        return self.pad([e[iq,i] for iq,i in enumerate(idx)],
-                [w[iq][:,i] for iq,i in enumerate(idx)])
     def phase(self,kS):
         """exp(2 pi i (M^-1 k_S).R) on every orbital of the supercell"""
         return np.exp(2j*np.pi*(self.R@(self.Minv@pad3(kS))))

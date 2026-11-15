@@ -10,6 +10,13 @@ the modulation projected on the states. With every state kept (emax=None)
 the result is the supercell exactly; with a cut, the one approximation is
 that the states above emax do not take part in the modulated states.
 
+A window (emin,emax) also freezes the states below emin: they are full,
+they do not respond to the modulation, and their density matrix is that of
+the unit cell tiled on the supercell, so that a deep band only enters the
+lattice-periodic part of the density (ultracelltk/meanfield.py,
+frozen_entries). The paper below has no such frozen states; they are an
+extension of ours.
+
 u.get_mean_field_hamiltonian() runs the mean field of scftk on the
 supercell with integration="ultracell" (ultracelltk/meanfield.py), so the
 density matrix, the Fermi level and the band energy of every iteration come
@@ -33,12 +40,21 @@ class Ultracell():
     """A supercell hs of the unit cell h, solved in the Bloch states of h
     with energy up to emax. Built by h.get_ultracell(hs,emax=...).
 
+    window=(emin,emax) is the cut on both sides, either entry None for an
+    open side, and emax=x is the same as window=(None,x); giving both is a
+    ValueError. The window is in the energies of the clean unit cell h, as
+    emax is. The states below emin are frozen: they are full in the density
+    matrix, the expectation values and the band energy, which add their
+    part, and they are not solved, so the spectral routines give no weight
+    outside the window. A frozen state does not respond to the modulation.
+    u.window, u.emin and u.emax keep the window.
+
     rebuild_basis=True takes, at each folded momentum, the states of the
-    lattice-periodic part of hs instead of those of h, as many as the cut
-    keeps in h. This is the default of the mean field, whose
-    lattice-periodic part (a uniform moment) can be large; with every
-    state kept the two bases span the same space"""
-    def __init__(self,h,hs,emax=None,rebuild_basis=False):
+    lattice-periodic part of hs instead of those of h, as many frozen and
+    as many kept as the window holds in h. This is the default of the mean
+    field, whose lattice-periodic part (a uniform moment) can be large;
+    with every state kept the two bases span the same space"""
+    def __init__(self,h,hs,emax=None,window=None,rebuild_basis=False):
         if h.non_hermitian or hs.non_hermitian:
             raise NotImplementedError("the ultracell is only implemented for "
                     "Hermitian Hamiltonians")
@@ -46,12 +62,14 @@ class Ultracell():
         self.hs = hs.copy() # the modulated supercell
         self.hs.turn_sparse() # it is only applied to vectors
         if hasattr(self.hs,"ultracell_basis"): del self.hs.ultracell_basis
-        self.basis = basistk.FoldedBasis(self.h,self.hs,emax=emax)
+        self.basis = basistk.FoldedBasis(self.h,self.hs,emax=emax,
+                window=window)
         self.rebuild_basis = bool(rebuild_basis)
         if self.rebuild_basis: # the states of the periodic part of hs
             self.basis = self.basis.rebuilt(self.hs)
         self.basis.rebuild = self.rebuild_basis
-        self.emax = self.basis.emax
+        self.window = self.basis.window
+        self.emin,self.emax = self.window
         self._hk = self.hs.get_hk_gen()
     def hk(self,kS):
         """Bloch Hamiltonian of the supercell at kS"""
@@ -85,10 +103,13 @@ class Ultracell():
         exchange J1, J2, J3, Jr (J1x, J1y, J1z), filling or mu, mf, nk (the
         mesh of the ultracell, 1 by default), T, mix, maxerror, maxite, ...
         Returns the Ultracell of the converged mean-field supercell, with
-        the same cut emax and the basis of the loop (rebuilt from the
+        the same window and the basis of the loop (rebuilt from the
         converged supercell with rebuild_basis=True, the clean one
         otherwise, whatever the basis of this ultracell), and its total
-        energy with return_total_energy=True.
+        energy with return_total_energy=True. The frozen states of a
+        window follow the basis: with the rebuilt one they are rebuilt at
+        every iteration, from the same diagonalization as the kept ones,
+        and they enter the lattice-periodic part of the mean field only.
 
         A spinful supercell runs on the sparse engine of the spin-spin mean
         field (scftk.spinspin), a spinless one on the sparse loop of
@@ -118,13 +139,15 @@ class Ultracell():
             check.require_spin(self.hs,"the spin-spin exchange "
                     +str(exchange))
         hs = self.hs.copy()
-        hs.ultracell_basis = basistk.FoldedBasis(self.h,hs,emax=self.emax)
+        hs.ultracell_basis = basistk.FoldedBasis(self.h,hs,
+                window=self.window)
         hs.ultracell_basis.rebuild = bool(rebuild_basis)
         kwargs.setdefault("nk",1)
         out = hs.get_mean_field_hamiltonian(integration="ultracell",
                 return_total_energy=return_total_energy,**kwargs)
         h2,etot = out if return_total_energy else (out,None)
-        u2 = Ultracell(self.h,h2,emax=self.emax,rebuild_basis=rebuild_basis)
+        u2 = Ultracell(self.h,h2,window=self.window,
+                rebuild_basis=rebuild_basis)
         if return_total_energy: return u2,etot
         return u2
 

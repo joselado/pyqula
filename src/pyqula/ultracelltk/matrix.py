@@ -79,15 +79,17 @@ def momentum_groups(basis,counts):
     return groups
 
 
-def eigenstates(basis,hk,kS):
+def eigenstates(basis,hk,kS,frozen=False):
     """Eigenvalues and eigenvectors of the ultracell at kS. The vectors are
     the coefficients of the kept states, (nkept,nstates) in the order of
     valid.ravel(), returned with the unit-cell vectors U and the mask
-    valid of basis.states, so that phi_q = U_q c_q"""
-    E,U,valid = basis.states(kS)
+    valid of basis.states, so that phi_q = U_q c_q. With frozen=True the
+    frozen states of the same call of basis.states follow, (Ef,Uf,validf)"""
+    out = basis.states(kS,frozen=frozen)
+    E,U,valid = out[0:3]
     H = ultracell_matrix(basis,hk,kS,E,U,valid)
     es,vs = eigh(H,overwrite_a=True) # H is not used after, no copy of it
-    return es,vs,U,valid
+    return (es,vs,U,valid) + tuple(out[3:])
 
 
 def eigenvalues(basis,hk,kS):
