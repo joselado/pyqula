@@ -286,3 +286,29 @@ def test_full_filling_without_a_cut():
     assert fermi_level(es,3,1.0)>=2.
     with pytest.raises(ValueError): # 6 states needed, 5 kept
         fermi_level([es[0],es[1][0:2]],3,1.0)
+
+
+def test_nondiagonal_mean_field_every_state():
+    """The Kekule cell of graphene, sqrt3 x sqrt3, a supercell along other
+    vectors than those of the unit cell, with a first-neighbor V1 whose
+    Fock terms modulate the bonds: with every state kept the mean field is
+    that of "ed" on the supercell, from the same guess"""
+    from scipy.sparse import csr_matrix
+    from pyqula.scftk.densitydensity import random_hermitian_guess
+    g = geometry.honeycomb_lattice()
+    gs = g.get_supercell([[2,1,0],[-1,1,0],[0,0,1]],store_primal=True)
+    h = g.get_hamiltonian(has_spin=False)
+    hs = gs.get_hamiltonian(has_spin=False)
+    x = fractional(gs)
+    hs.add_onsite(lambda r: 0.2*np.cos(2*np.pi*(x(r)[0]+x(r)[1])))
+    u = h.get_ultracell(hs)
+    np.random.seed(5)
+    mf = random_hermitian_guess(hs.get_multihopping().get_dict(),
+            hs.intra.shape,scale=0.3)
+    kw = dict(V1=2.0,filling=0.5,nk=3,maxerror=1e-11,verbose=0,write=False)
+    u2,e2 = u.get_mean_field_hamiltonian(return_total_energy=True,
+            mf={d: csr_matrix(m) for d,m in mf.items()},**kw)
+    h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
+            integration="ed",mf=mf,**kw)
+    assert abs(e2-e3)<1e-8
+    assert same_state(u2,h3)<1e-7

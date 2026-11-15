@@ -104,8 +104,21 @@ The keywords that change the result:
 The modulation can be anything that pyqula adds to a supercell: an onsite
 potential, an exchange field with `hs.add_exchange()`, a pairing with
 `hs.add_swave()`, or hoppings that change from cell to cell. The supercell
-must be diagonal, $n_1\times n_2\times n_3$ copies of the unit cell along its
-own lattice vectors, and it must keep every site.
+must keep every site.
+
+The supercell does not have to be along the lattice vectors of the unit cell.
+An example is the $\sqrt3\times\sqrt3$ cell of a Kekule order of graphene. Its
+lattice vectors are $\mathbf A_S=M\mathbf A$ with an integer matrix $M$, and the
+momenta that fold onto $\mathbf k_S$ are then
+$\mathbf p_{\mathbf q}=M^{-1}(\mathbf k_S+\mathbf q)$. `h.get_supercell()` takes
+only the number of repetitions, so we build such a cell from the geometry, and
+add to it the same terms as to `h`:
+
+```python
+gs = g.get_supercell([[2,1,0],[-1,1,0],[0,0,1]]) # the sqrt3 x sqrt3 cell
+hs = gs.get_hamiltonian() # the same model as h, on the supercell
+u = h.get_ultracell(hs) # the momenta fold with the matrix of the cell
+```
 
 See `examples/2d/ultracell/main.py`.
 

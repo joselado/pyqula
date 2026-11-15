@@ -19,7 +19,8 @@ with an FFT over the cells, so the clean part comes out as the band energies on 
 diagonal without any subtraction. Its methods are `get_hk_gen`, `get_kdos_bands`,
 `get_dos`, `get_ldos`, `get_vev` and `get_harmonics`, each with the normalization of its
 counterpart on the unit cell or the supercell. The cut is `emax=`, every state up to an
-energy, with a degenerate level kept whole. Diagonal supercells only; a supercell with a
+energy, with a degenerate level kept whole. Diagonal supercells only at first (any
+supercell matrix since 15 November 2026, see "Non-diagonal ultracells"); a supercell with a
 site removed, a non-Hermitian Hamiltonian and `get_vev` with Nambu raise.
 
 `tests/ultracell/test_ultracell.py` (17 tests) pins: the supercell spectrum with every
@@ -211,6 +212,34 @@ near the Fermi level helps the local density of states there, not the density ma
 needs every occupied state. The new wall is the time of the dense `eigh` of
 the ultracell matrix, about 5000 kept states, and its eigenvectors, which are quadratic in
 the kept states.
+
+## Non-diagonal ultracells (15 November 2026)
+
+A supercell along other vectors than those of the unit cell, $\mathbf A_S=M\mathbf A$ with
+an integer matrix $M$, the $\sqrt3\times\sqrt3$ cell of a Kekule order or a commensurate
+moiré cell, works since the night of 15 November 2026. The folded momenta are
+$\mathbf p_{\mathbf q}=M^{-1}(\mathbf k_S+\mathbf q)$ with $\mathbf q\in\mathbb
+Z^d/M\mathbb Z^d$, and the phase of a cell $\mathbf R$ is $\mathbf R\cdot
+M^{-1}\mathbf q$. A diagonal form $PMQ=\mathrm{diag}(\mathbf n)$ with unimodular $P$
+and $Q$ (`basis.diagonal_form`, a Euclid reduction of rows and columns, not the full
+Smith form, since the FFT does not need $n_i$ to divide $n_{i+1}$) gives
+$\mathbf R\cdot M^{-1}\mathbf q=(\mathbf RQ)\,\mathrm{diag}(1/\mathbf n)\,(P\mathbf
+q)$, so the cells are a grid in $\mathbf RQ$ and the momenta a grid in $P\mathbf q$,
+and every transform stays an FFT. The averaged hoppings take $\mathbf D M$ for the
+displacement of the supercell $\mathbf D$, the unfolded spectral function takes
+$\mathbf k_S=M\mathbf p$, and the harmonics come at $M^{-1}\mathbf q$. A diagonal $M$
+gives $P=Q=1$ and the code of before.
+
+Tests: the supercell spectrum with every state to $10^{-11}$, and the Rayleigh-Ritz
+bound with a cut, for $\sqrt3\times\sqrt3$ and a seven-cell rotated honeycomb cell, a
+seven-cell and a sheared six-cell triangular cell, all with $P$ and $Q$ not the identity,
+and a chain; the unfolded spectral function against `operator="unfold"` and the
+harmonics of a plane wave on the cells; the rebuilt basis against the block of each
+momentum; the V1 mean field of the Kekule cell against "ed". `h.get_supercell()` takes
+only repetitions, so a non-diagonal supercell is built from its geometry,
+`g.get_supercell(M).get_hamiltonian()`, with the same terms added; a supercell
+Hamiltonian of a general `h` along a matrix $M$ is not built (the inverse of the
+averaged hoppings would give it).
 
 ## The method, and what it becomes in a tight-binding basis
 
@@ -417,9 +446,9 @@ For a modulation with a few harmonics the matrix is sparse in blocks.
 The unfolded spectral function then follows from the KPM with the $N_b$ start vectors of the
 block of momentum $\mathbf p$, deterministic, the same factored moments as the KPM
 unfolding of `unfolding.md`, and the states near the Fermi level from ARPACK through
-`algebra.arpack_eigh`. The harmonic route for onsite terms goes in here, and so do the
-non-diagonal ultracells ($\sqrt3\times\sqrt3$, commensurate moiré cells), whose folded set
-is $\mathbb Z^d/M^T\mathbb Z^d$ with the $M$ that `get_supercell_map` already returns.
+`algebra.arpack_eigh`. The harmonic route for onsite terms goes in here. The non-diagonal
+ultracells planned here are built (see "Non-diagonal ultracells"); their folded set is
+$\mathbb Z^d/M\mathbb Z^d$ in the column convention of $M^{-1}\mathbf k_S$.
 
 ### Stage 4: response
 

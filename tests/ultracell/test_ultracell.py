@@ -326,9 +326,10 @@ def test_wrong_inputs_raise():
     hs = h.get_supercell(2)
     with pytest.raises(TypeError):
         h.get_ultracell(hs,emax="high")
-    gs = g.get_supercell([[1,1,0],[-1,1,0],[0,0,1]]) # rotated supercell
-    with pytest.raises(NotImplementedError):
-        h.get_ultracell(gs.get_hamiltonian())
+    gs = g.get_supercell([[2,1,0],[-1,1,0],[0,0,1]]) # rotated supercell
+    hs = gs.get_hamiltonian() ; hs.remove_spin()
+    with pytest.raises(ValueError): # not the same Hilbert space
+        h.get_ultracell(hs)
 
 
 @pytest.mark.parametrize("size",[3,8])
@@ -360,3 +361,102 @@ def test_states_in_chunks_give_the_same_observables(monkeypatch,size):
     assert np.max(np.abs(l1-l2))<1e-12
     assert np.max(np.abs(v1-v2))<1e-12
     for d in d1: assert np.max(np.abs(d1[d]-d2[d]))<1e-12
+
+
+NONDIAGONAL = [
+    ("honeycomb",[[2,1,0],[-1,1,0],[0,0,1]]), # sqrt3 x sqrt3, the Kekule cell
+    ("honeycomb",[[1,2,0],[-2,3,0],[0,0,1]]), # 7 cells, rotated
+    ("triangular",[[3,1,0],[-1,2,0],[0,0,1]]), # 7 cells, P and Q not trivial
+    ("triangular",[[2,0,0],[1,3,0],[0,0,1]]), # 6 cells, sheared
+    ("chain",[[3,0,0],[0,1,0],[0,0,1]]),
+    ]
+
+
+def nondiagonal_model(name,M,spin=True):
+    """A unit cell h and its supercell of matrix M, built from the geometry
+    of the supercell, with the same Rashba coupling on both and a
+    modulation on the supercell: an onsite potential and an exchange field
+    periodic on it, and modulated hoppings"""
+    g = {"honeycomb": geometry.honeycomb_lattice,
+         "triangular": geometry.triangular_lattice,
+         "chain": geometry.chain}[name]()
+    gs = g.get_supercell(M,store_primal=True)
+    h = g.get_hamiltonian(has_spin=spin)
+    hs = gs.get_hamiltonian(has_spin=spin)
+    if spin and g.dimensionality==2:
+        h.add_rashba(0.3) ; hs.add_rashba(0.3)
+    x = fractional(hs)
+    d = hs.dimensionality
+    def wave(r,a=0.):
+        return np.cos(2*np.pi*np.sum(x(r)[0:d])+a)
+    hs.add_onsite(lambda r: 0.3*wave(r) + 0.1*wave(r,1.))
+    if spin: hs.add_exchange(lambda r: [0.2*wave(r,0.4),0.,0.1])
+    modulate_hoppings(hs,lambda r: 0.2*wave(r,0.7))
+    return h,hs
+
+
+@pytest.mark.parametrize("name,M",NONDIAGONAL)
+def test_nondiagonal_supercell_every_state(name,M):
+    """A supercell along other vectors than those of the unit cell, of
+    matrix M: with every state kept the ultracell is the supercell, at a
+    generic kS, and with a cut a Rayleigh-Ritz compression of it"""
+    h,hs = nondiagonal_model(name,M)
+    u = h.get_ultracell(hs)
+    assert u.basis.N==round(abs(np.linalg.det(np.array(M))))
+    for kS in [np.array([0.13,0.37,0.]),np.array([0.,0.,0.])]:
+        e1,e2 = spectra(u,hs,kS)
+        assert np.max(np.abs(e1-e2))<1e-11
+    u = h.get_ultracell(hs,emax=0.,rebuild_basis=True)
+    e1 = eigh(u.get_hk_gen()(kS),eigvals_only=True)
+    assert np.all(e1>=e2[0:len(e1)]-1e-10)
+
+
+@pytest.mark.parametrize("name,M",NONDIAGONAL[0:3])
+def test_nondiagonal_unfolded_weight_and_harmonics(name,M):
+    """The unfolded weight of each state is that of operator="unfold" on
+    the supercell over N, and a plane wave cos(2 pi Q.R) on the cells has
+    its harmonics at Q and -Q only, for each folded momentum Q"""
+    h,hs = nondiagonal_model(name,M,spin=False)
+    u = h.get_ultracell(hs)
+    b = u.basis
+    p = np.array([0.21,0.08,0.])
+    es = np.linspace(-4.,4.,80)
+    a1 = u.get_kdos_bands(kpath=[p],energies=es,delta=0.05,write=False)[2]
+    op = bloch_projector(hs,g0=h.geometry)
+    kS = b.M@p # the momentum of the supercell that p folds onto
+    a2 = hs.get_kdos_bands(kpath=[kS],operator=op,energies=es,delta=0.05,
+            write=False)[2]
+    assert np.max(np.abs(b.N*a1-a2))<1e-10*np.max(np.abs(a2))
+    assert np.max(a2)>1. # the spectral function is not empty here
+    Qs = b.folded_momenta(np.zeros(3))
+    rep = np.array(hs.geometry.supercell_replica,dtype=float)
+    for Q in Qs[1:]:
+        f = np.cos(2*np.pi*rep@Q)
+        Qs2,F = u.get_harmonics(f)
+        same = [np.allclose(np.mod(Qp-Q+0.5,1.)-0.5,0.,atol=1e-9)
+                for Qp in Qs2]
+        opposite = [np.allclose(np.mod(Qp+Q+0.5,1.)-0.5,0.,atol=1e-9)
+                for Qp in Qs2]
+        mask = np.array(same)|np.array(opposite)
+        assert np.max(np.abs(F[~mask]))<1e-12
+        assert np.min(np.abs(F[np.array(same)]))>0.2 # half of cos
+
+
+@pytest.mark.parametrize("name,M",NONDIAGONAL[0:3])
+def test_nondiagonal_rebuilt_basis(name,M):
+    """The rebuilt basis of a non-diagonal supercell diagonalizes the block
+    of each folded momentum on itself, as in the diagonal case"""
+    h,hs = nondiagonal_model(name,M)
+    u = h.get_ultracell(hs,emax=0.3,rebuild_basis=True)
+    b = u.basis
+    kS = np.array([0.31,0.17,0.])
+    E,U,valid = b.states(kS)
+    hk = u.hk(kS)
+    I = [np.identity(b.norb,dtype=np.complex128)]*b.N
+    for iq in range(b.N):
+        B = b.basis_block(kS,I,iq)
+        heff = B.conj().T@np.asarray(hk@B)
+        m = np.sum(valid[iq])
+        if m==0: continue
+        e = eigh(heff,eigvals_only=True)
+        assert np.max(np.abs(E[iq,0:m]-e[0:m]))<1e-12

@@ -1,11 +1,17 @@
 """The folded Bloch basis of the ultracell method.
 
-The ultracell is a supercell of n1 x n2 x n3 unit cells. At a Bloch momentum
-k_S of the ultracell (reduced coordinates of the ultracell), the clean
-supercell is diagonalized by the Bloch states of the unit cell at the N
-folded momenta
+The ultracell is a supercell of N unit cells, with lattice vectors
+A_S = M A (rows) for an integer matrix M, n1 x n2 x n3 cells along the
+lattice vectors when M is diagonal. At a Bloch momentum k_S of the
+ultracell (reduced coordinates of the ultracell), the clean supercell is
+diagonalized by the Bloch states of the unit cell at the N folded momenta
 
-    p_q = (k_S + q)/n   (componentwise),   q in Z_n1 x Z_n2 x Z_n3,
+    p_q = M^-1 (k_S + q),   q in Z^d / M Z^d,
+
+which is (k_S + q)/n componentwise for a diagonal M. For any M a diagonal
+form P M Q = diag(n), with P and Q unimodular, makes the q a grid in the
+coordinates P q and the cells R a grid in the coordinates R Q, since
+R.M^-1 q = (R Q) diag(1/n) (P q), so both transforms below are FFTs,
 
 written on the orbitals of the supercell as
 
@@ -45,21 +51,60 @@ def pad3(k):
     return kv
 
 
-def diagonal_shape(M):
-    """The three integers of a diagonal supercell matrix, padded to 3x3"""
+def diagonal_form(M):
+    """Unimodular integer matrices P and Q and the positive integers n with
+    P M Q = diag(n), for a square nonsingular integer matrix M (a diagonal
+    form, not necessarily the Smith form with n_i dividing n_{i+1}, which
+    the FFT does not need). The folded momenta of the supercell are then a
+    rectangular grid in the coordinates P q, and its cells in R Q"""
+    A = [[int(x) for x in row] for row in np.array(M,dtype=int)]
+    d = len(A)
+    P = [[int(i==j) for j in range(d)] for i in range(d)]
+    Q = [[int(i==j) for j in range(d)] for i in range(d)]
+    for t in range(d):
+        while True:
+            nz = [(abs(A[i][j]),i,j) for i in range(t,d) for j in range(t,d)
+                    if A[i][j]!=0]
+            if len(nz)==0:
+                raise ValueError("the supercell matrix "+str(np.array(M)
+                    .tolist())+" is singular")
+            _,i,j = min(nz) # the smallest entry as the pivot
+            A[t],A[i] = A[i],A[t] ; P[t],P[i] = P[i],P[t] # swap rows
+            for row in A: row[t],row[j] = row[j],row[t] # swap columns
+            for row in Q: row[t],row[j] = row[j],row[t]
+            clean = True
+            for i in range(t+1,d): # reduce the column below the pivot
+                f = A[i][t]//A[t][t]
+                A[i] = [a-f*b for a,b in zip(A[i],A[t])]
+                P[i] = [a-f*b for a,b in zip(P[i],P[t])]
+                clean = clean and A[i][t]==0
+            for j in range(t+1,d): # and the row to its right
+                f = A[t][j]//A[t][t]
+                for row in A: row[j] -= f*row[t]
+                for row in Q: row[j] -= f*row[t]
+                clean = clean and A[t][j]==0
+            if clean: break # what is left is smaller than the pivot
+        if A[t][t]<0: A[t] = [-a for a in A[t]] ; P[t] = [-a for a in P[t]]
+    return (np.array(P,dtype=int),np.array(Q,dtype=int),
+            np.array([A[t][t] for t in range(d)],dtype=int))
+
+
+def supercell_shape(M,dim):
+    """The supercell matrix padded to 3x3, M (A_supercell = M A, rows), and
+    its diagonal form P M Q = diag(n) on the first dim directions, padded
+    with the identity, as in diagonal_form"""
     M = np.array(M,dtype=int)
     M3 = np.identity(3,dtype=int)
     M3[0:M.shape[0],0:M.shape[1]] = M
-    if np.any(M3!=np.diag(np.diag(M3))):
-        raise NotImplementedError("the ultracell is only implemented for a "
-                "diagonal supercell, n1 x n2 x n3 copies of the unit cell "
-                "along its own lattice vectors; this supercell has the "
-                "matrix "+str(M3.tolist()))
-    n = np.diag(M3).astype(int)
-    if np.any(n<1):
-        raise ValueError("the supercell matrix has a non-positive diagonal "
-                +str(n.tolist()))
-    return n
+    if np.any(M3[0:dim,dim:]!=0) or np.any(M3[dim:,0:dim]!=0) or \
+            np.any(M3[dim:,dim:]!=np.identity(3-dim,dtype=int)):
+        raise ValueError("the supercell matrix "+str(M3.tolist())+" mixes "
+                "the first "+str(dim)+" lattice vectors of a "+str(dim)
+                +"-dimensional lattice with the others")
+    P,Q = np.identity(3,dtype=int),np.identity(3,dtype=int)
+    n = np.ones(3,dtype=int)
+    P[0:dim,0:dim],Q[0:dim,0:dim],n[0:dim] = diagonal_form(M3[0:dim,0:dim])
+    return M3,P,Q,n
 
 
 def cut_window(e,emax,tol=1e-7):
@@ -127,7 +172,11 @@ class FoldedBasis():
             raise ValueError("the ultracell needs a periodic unit cell, got "
                     "a zero-dimensional Hamiltonian")
         M,replicas,primal = get_supercell_map(hs.geometry,h.geometry)
-        self.n = diagonal_shape(M) # cells along each lattice vector
+        # the supercell matrix and its diagonal form P M Q = diag(n): the
+        # cells are a grid of n1 x n2 x n3 in the coordinates R Q, and the
+        # folded momenta a grid in P q, so both transforms are FFTs
+        self.M,self.P,self.Q,self.n = supercell_shape(M,h.dimensionality)
+        self.Minv = np.linalg.inv(self.M.astype(float))
         self.N = int(np.prod(self.n)) # number of cells
         self.dimensionality = h.dimensionality
         self.norb = h.intra.shape[0] # orbitals of the unit cell
@@ -151,7 +200,7 @@ class FoldedBasis():
         # per orbital of the supercell: its cell and its unit-cell orbital
         R = np.repeat(rep3,f,axis=0) # actual cell vector of each orbital
         self.alpha = np.repeat(primal*f,f) + np.tile(np.arange(f),nats)
-        cell = np.mod(R,self.n[None,:]) # cell inside the ultracell
+        cell = np.mod(R@self.Q,self.n[None,:]) # cell inside the ultracell
         self.cell = np.ravel_multi_index(cell.T,tuple(self.n))
         key = self.cell*self.norb + self.alpha
         if len(np.unique(key))!=norbs:
@@ -159,12 +208,13 @@ class FoldedBasis():
                     "each cell exactly once, so it is not a supercell of "
                     "this unit cell")
         self.R = R.astype(float)
-        self.site_cell = np.ravel_multi_index(np.mod(rep3,self.n[None,:]).T,
-                tuple(self.n)) # cell of each site of the supercell
+        self.site_cell = np.ravel_multi_index(np.mod(rep3@self.Q,
+            self.n[None,:]).T,tuple(self.n)) # cell of each site
         self.site_primal = primal # unit-cell site of each site
         self.nsites = nat0
         self.q = np.stack(np.meshgrid(*[np.arange(m) for m in self.n],
-            indexing="ij"),axis=-1).reshape(-1,3) # folded momenta, C order
+            indexing="ij"),axis=-1).reshape(-1,3) # P q of the folded
+        # momenta, in C order
         self.hop0 = HoppingSum(h.get_multihopping().get_dict(),self.norb,
                 dim=self.dimensionality) # Bloch Hamiltonian of the unit cell
         if emax is not None:
@@ -177,9 +227,11 @@ class FoldedBasis():
         self.hopp = None # the lattice-periodic part, see rebuilt()
         self._counts = {} # states kept by the clean cut, per kS
     def folded_momenta(self,kS):
-        """The N momenta p_q = (k_S+q)/n, in reduced coordinates of the
-        unit cell, one row per q"""
-        return (pad3(kS)[None,:] + self.q)/self.n[None,:]
+        """The N momenta p_q = M^-1 (k_S+q) = Q diag(1/n) (P k_S + P q), in
+        reduced coordinates of the unit cell, one row per q, which is
+        (k_S+q)/n for a diagonal supercell"""
+        t = ((self.P@pad3(kS))[None,:] + self.q)/self.n[None,:]
+        return t@self.Q.T
     def rebuilt(self,hs):
         """A copy of this basis whose states are those of the
         lattice-periodic part of the supercell hs, its hoppings averaged
@@ -196,9 +248,9 @@ class FoldedBasis():
     def periodic_hoppings(self,hs):
         """The hoppings of the supercell hs averaged over its N cells, as
         the hoppings of a unit cell, {d: (norb,norb)}. An element of hs
-        between orbital i of cell R_i and orbital j of cell R_j + n D of
+        between orbital i of cell R_i and orbital j of cell R_j + D M of
         the supercell D is a hopping of the unit cell in the direction
-        d = R_j + n D - R_i, between their unit-cell orbitals, divided by
+        d = R_j + D M - R_i, between their unit-cell orbitals, divided by
         N. It is the lattice-periodic part of hs: a uniform moment, a
         uniform shift, the average of a modulated hopping"""
         from scipy.sparse import coo_matrix
@@ -207,7 +259,7 @@ class FoldedBasis():
             m = coo_matrix(m)
             if m.nnz==0: continue
             i,j,val = m.row,m.col,m.data
-            d = self.R[j] - self.R[i] + self.n[None,:]*pad3(D)[None,:]
+            d = self.R[j] - self.R[i] + (pad3(D)@self.M)[None,:]
             d = np.round(d).astype(int)
             keys,inv = np.unique(d,axis=0,return_inverse=True)
             inv = np.ravel(inv)
@@ -265,15 +317,15 @@ class FoldedBasis():
         return self.pad([e[iq,i] for iq,i in enumerate(idx)],
                 [w[iq][:,i] for iq,i in enumerate(idx)])
     def phase(self,kS):
-        """exp(2 pi i (k_S/n).R) on every orbital of the supercell"""
-        return np.exp(2j*np.pi*(self.R@(pad3(kS)/self.n)))
+        """exp(2 pi i (M^-1 k_S).R) on every orbital of the supercell"""
+        return np.exp(2j*np.pi*(self.R@(self.Minv@pad3(kS))))
     def to_supercell(self,kS,phi):
         """From the components phi (N,norb,...) per folded momentum to the
         vector on the supercell orbitals,
         Phi(R,alpha) = N^(-1/2) sum_q exp(2 pi i p_q.R) phi_q(alpha)"""
         rest = phi.shape[2:]
         a = phi.reshape(tuple(self.n)+(self.norb,)+rest)
-        a = np.fft.ifftn(a,axes=(0,1,2))*self.N # sum_q exp(+2 pi i q.R/n)
+        a = np.fft.ifftn(a,axes=(0,1,2))*self.N # sum_q exp(+2 pi i R.M^-1 q)
         a = a.reshape((self.N,self.norb)+rest)
         out = a[self.cell,self.alpha]/np.sqrt(self.N)
         ph = self.phase(kS).reshape((-1,)+(1,)*len(rest))
@@ -287,7 +339,7 @@ class FoldedBasis():
         Z = np.zeros((self.N,self.norb)+rest,dtype=np.complex128)
         Z[self.cell,self.alpha] = ph*Y
         Z = Z.reshape(tuple(self.n)+(self.norb,)+rest)
-        Z = np.fft.fftn(Z,axes=(0,1,2)) # sum_R exp(-2 pi i q.R/n)
+        Z = np.fft.fftn(Z,axes=(0,1,2)) # sum_R exp(-2 pi i R.M^-1 q)
         return Z.reshape((self.N,self.norb)+rest)/np.sqrt(self.N)
     def basis_block(self,kS,U,iq):
         """The basis vectors of the folded momentum iq on the supercell

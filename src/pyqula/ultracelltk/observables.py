@@ -49,7 +49,7 @@ def kdos_bands(u,kpath=None,energies=np.linspace(-3.0,3.0,200),delta=0.01,
     kpath = u.h.geometry.get_kpath(kpath,nk=nk,write=write) # unit-cell path
     out = []
     for p in kpath:
-        kS = pad3(p)*u.basis.n # so that the folded momentum q=0 is p itself
+        kS = u.basis.M@pad3(p) # so that the folded momentum q=0 is p itself
         es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
         b0 = np.sum(valid[0]) # the kept states of q=0 come first
         w = np.sum(np.abs(vs[0:b0])**2,axis=0) # weight on q=0
@@ -168,4 +168,4 @@ def harmonics(u,values):
     F[b.site_cell,b.site_primal] = values
     F = F.reshape(tuple(b.n)+(b.nsites,))
     F = np.fft.fftn(F,axes=(0,1,2)).reshape(b.N,b.nsites)/b.N
-    return b.q/b.n[None,:],F
+    return b.folded_momenta(np.zeros(3)),F
