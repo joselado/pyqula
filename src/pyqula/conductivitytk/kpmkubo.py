@@ -40,6 +40,10 @@ imaginary part is i Im sigma^A_xy(w), the circular dichroism. It is the
 delta-function part of the Lehmann formula of conductivity.py, so for exact
 moments it is the same number. The energy integral is done on
 Chebyshev-Gauss nodes, which absorb the 1/sqrt(1-x^2) of the first delta.
+At T=0 the occupation factor is a box of width w, which a small w puts
+between two nodes; there the rest of the integrand is interpolated by its
+Chebyshev series on the nodes and the box is integrated in closed form, so
+any w works (absorptive and _box_weights).
 
 2) The DC tensor (Kubo-Bastin), Garcia, Covaci and Rappoport, PRL 114,
 116602 (2015), Eq. (3), re-derived here from
@@ -514,9 +518,132 @@ def _contract(x2,idx,wts,Y):
     return out
 
 
+def _box_weights(ne,fermi,w,a,b):
+    """Weights q_j of the ne Chebyshev-Gauss nodes x_j = cos(theta_j),
+    theta_j = pi (j + 1/2)/ne, for the absorptive part at T=0,
+
+      pi int dE [f(E) - f(E+w)]/w rho(E,E+w) = pi sum_j q_j G_j,
+
+    with G(theta) = a sin(theta) rho(E,E+w) at E = a cos(theta) + b, the
+    integrand in theta (dE = a sin(theta) dtheta), and G_j its value at the
+    node j (see absorptive).
+
+    At T=0 the occupation factor is a box: 1/|w| between fermi - w and
+    fermi (between fermi and fermi + |w| for w < 0), zero elsewhere. The
+    nodes are spaced by about pi a/ne, so a box narrower than that holds
+    zero or one of them, and the rule of the finite temperature,
+    q_j = r(E_j) pi/ne, then gives zero or several times the right value.
+
+    Here G is replaced by its Chebyshev interpolant on the same nodes,
+
+      G(theta) = sum_{k<ne} c_k cos(k theta),
+      c_k = ((2 - delta_k0)/ne) sum_j G_j cos(k theta_j),
+
+    from the discrete orthogonality of cos(k theta_j) on these nodes. It is
+    exact for a polynomial of degree below ne in x = cos(theta). G is a
+    polynomial of degree 2M-2, below ne = 4M, times the smooth factor
+    1/sqrt(1 - x2^2) of the second delta function, so the interpolant
+    follows it closely wherever the spectrum is. The interpolant is then
+    integrated over the box in closed form. In x this is the integral of
+    the Chebyshev series with its weight, int T_k(x) dx/sqrt(1-x^2) =
+    -sin(k arccos x)/k, and in theta, over [theta1, theta1 + dtheta],
+
+      int cos(k theta) dtheta = dtheta cos(k thetac) sinc(k dtheta/2),
+
+    with thetac = theta1 + dtheta/2 the center and sinc(u) = sin(u)/u. So
+    the interpolant integrated over the box and divided by |w| is
+    sum_j W_j G_j, with
+
+      W_j = (dtheta/|w|) (1/ne) [1 + 2 sum_{k>=1} cos(k theta_j) e_k],
+      e_k = cos(k thetac) sinc(k dtheta/2),
+
+    a DCT of type 3 of e_k. A box that covers every node gives
+    W_j = pi/(ne |w|), the rule of the finite temperature with r = 1/|w|.
+
+    The box is [x1, x2] in x, cut to [-1, 1], with theta1 = arccos(x2).
+    From tan(dtheta/2) = (cos theta1 - cos theta2)/(sin theta1 +
+    sin theta2), dtheta = 2 arctan((x2 - x1)/(s1 + s2)) with
+    s = sqrt(1 - x^2), which has no cancellation for a small box, and
+    x2 - x1 = |w|/a when the box is not cut. So any w works, and w = 0
+    is the limit: the box over |w| becomes delta(E - fermi), dtheta/|w|
+    tends to 1/(a s), and the result is pi rho(fermi, fermi), the KPM
+    Drude peak at w = 0.
+
+    The interpolation is only needed at the two edges of the box, so it is
+    kept local there. With psi a smooth window that is one within 36 nodes
+    of either edge and zero from 72 nodes on (_edge_window), and B the box,
+
+      int B G dtheta = int B (G psi) dtheta + int B (1 - psi) G dtheta.
+
+    The first term is the interpolant of G psi integrated over the box as
+    above, sum_j psi_j W_j G_j with W_j the weights of the interpolant. In
+    the second, B (1 - psi) G is smooth, since 1 - psi vanishes where B
+    jumps, so the midpoint rule pi/ne is exact for it to the same accuracy.
+    So
+
+      q_j = psi_j W_j + (1 - psi_j) B_j pi/(ne |w|).
+
+    A narrow box lies inside the window, and q_j = psi_j W_j. Without the
+    window every node of the spectrum would enter the interpolant, and the
+    edge of the rescaled spectrum, where the 1/sqrt(1 - x2^2) of the second
+    delta function diverges, would ring into the box. With it the weights
+    are local, as at finite T, and that edge enters only through the
+    midpoint rule inside a box that reaches it, as before"""
+    from scipy.fft import dct
+    lo,hi = fermi-max(w,0.),fermi-min(w,0.) # the box in energy
+    x1,x2 = max((lo-b)/a,-1.),min((hi-b)/a,1.) # in x, cut to [-1,1]
+    q = np.zeros(ne)
+    if w==0.: # the limit, a delta function at the Fermi level
+        if not -1.<x2<1.: return q # outside the rescaled spectrum
+        th1,dth = np.arccos(x2),0.
+        dth_w = 1./(a*np.sqrt(1.-x2**2)) # dtheta/|w| as w -> 0
+    else:
+        if not x1<x2: return q # the box is outside the rescaled spectrum
+        cut = (lo-b)/a<-1. or (hi-b)/a>1.
+        d = x2-x1 if cut else abs(w)/a # width of the box in x
+        s1,s2 = np.sqrt(1.-x2**2),np.sqrt(1.-x1**2)
+        th1 = np.arccos(x2)
+        dth = 2.*np.arctan2(d,s1+s2) # width in theta, see above
+        dth_w = dth/abs(w)
+    k = np.arange(ne)
+    th = np.pi*(k+0.5)/ne # the nodes in theta
+    e = np.cos(k*(th1+dth/2.))*np.sinc(k*dth/(2.*np.pi)) # np.sinc(u/pi)
+    W = dth_w*dct(e,type=3)/ne # interpolant over the box, divided by |w|
+    tau = 6.*np.pi/ne # width of the edges of the window, 6 nodes
+    psi = 1.-(1.-_edge_window(th,th1,tau))*(1.-_edge_window(th,th1+dth,tau))
+    box = (th>=th1)&(th<=th1+dth) # the nodes inside the box
+    # the midpoint rule inside; at w=0 the box has no width and no inside
+    mid = np.where(box,np.pi/(ne*abs(w)),0.) if w!=0. else 0.
+    q = psi*W + (1.-psi)*mid
+    q[(psi<1e-16)&~box] = 0. # far from the edges and outside the box
+    return q
+
+
+def _edge_window(th,the,tau):
+    """Smooth window in theta, at the angles th in [0, pi], one within 6 tau
+    of the edge the and zero beyond 12 tau, each side an error function of
+    width tau, so it differs from one and from zero there by
+    erfc(6)/2 ~ 1e-17. The Fourier content of a side falls as
+    exp(-k^2 tau^2/4), so with tau = 6 pi/ne it is exp(-22), 2e-10, at
+    k = ne/2, the room the ne nodes leave above the degree 2M-2 = ne/2 - 2
+    of G, and G times the window is interpolated as well as G itself. G
+    is a function of cos(theta), even and of period 2 pi in theta, and the
+    window is made so too: the union of the window and its images at
+    -theta and 2 pi - theta, still one near the edge and smooth across
+    theta = 0 and pi"""
+    from scipy.special import erf
+    m = 6.*tau
+    def chi(t): return 0.5*(erf((t-the+m)/tau)-erf((t-the-m)/tau))
+    return 1.-(1.-chi(th))*(1.-chi(-th))*(1.-chi(2.*np.pi-th))
+
+
 def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
     """Absorptive (Hermitian) part of sigma_ab(w), (nw,3,3), from one set of
-    moments (see the module docstring)"""
+    moments (see the module docstring). At T=0 the occupation box is
+    integrated exactly over the Chebyshev interpolant of the rest of the
+    integrand (_box_weights), so any w works, w=0 included. At T>0 the
+    occupation factor is sampled on the nodes, which needs T above their
+    spacing, about pi a/ne (delta/7 for the default ne)"""
     M = st.M
     a,b = st.a,st.b
     if ne is None: ne = 4*M
@@ -533,17 +660,23 @@ def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
     parallel.set_num_threads()
     out = np.zeros((len(energies),3,3),dtype=np.complex128)
     for iw,w in enumerate(energies):
-        r = _ratio(E,w,fermi,T)
         E2 = E + w
         keep = inside & (E2>st.emin-pad) & (E2<st.emax+pad) & \
-                (np.abs(E2-b)<a*(1.-1e-9)) & \
-                (np.abs(r)>1e-14*np.max(np.abs(r))+1e-300)
+                (np.abs(E2-b)<a*(1.-1e-9))
+        if T<=0.: # the box, integrated over the interpolant of the rest
+            q = _box_weights(ne,fermi,w,a,b)
+            keep = keep & (q!=0.)
+        else:
+            r = _ratio(E,w,fermi,T)
+            keep = keep & (np.abs(r)>1e-14*np.max(np.abs(r))+1e-300)
         if not np.any(keep): continue
         idx = np.nonzero(keep)[0]
         x2 = (E2[idx]-b)/a
         # phi_n(E+w) = (2 - delta_n0) T_n(x2)/(pi a sqrt(1-x2^2)), times the
-        # weight of pi int dE on the Chebyshev-Gauss nodes
-        wts = r[idx]*(np.pi/ne)*a*np.pi/(np.pi*a*np.sqrt(1.-x2**2))
+        # weight of pi int dE on the Chebyshev-Gauss nodes: q_j at T=0, and
+        # r_j pi/ne, the midpoint rule in theta = arccos(x), at T>0
+        if T<=0.: wts = q[idx]/np.sqrt(1.-x2**2)
+        else: wts = r[idx]*(np.pi/ne)*a*np.pi/(np.pi*a*np.sqrt(1.-x2**2))
         s = _contract(x2,idx,wts,Y).reshape((nd,nd))
         for ia,al in enumerate(st.dirs):
             for ib,be in enumerate(st.dirs): out[iw,al,be] = s[ia,ib]
@@ -577,9 +710,8 @@ def reactive_part(st,mu,energies,fermi=0.,T=0.,ne=None,spacing=None):
     up to the bandwidth, where it vanishes, and continued to negative
     frequencies by sigma^H_ab(-w) = sigma^H_ba(w), which the moments obey
     exactly since mu^ba = (mu^ab)^T. The grid sits at half-integer
-    multiples of the spacing, so no node falls on w = 0, where at T = 0 the
-    occupation factor of absorptive() is zero and would cut a notch in a
-    Drude peak"""
+    multiples of the spacing, so the grid continued to negative frequencies
+    stays uniform across w = 0 and has no node there twice"""
     h = st.delta/8. if spacing is None else float(spacing)
     wmax = (st.emax-st.emin) + 20.*st.delta # absorptive() is zero beyond
     nw = int(np.ceil(wmax/h))
@@ -795,7 +927,10 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
     fermi : float
       Fermi level, default 0
     T : float
-      temperature, default delta
+      temperature, default delta. T=0 integrates the occupation box
+      exactly, so any frequency works, w=0 included (the top of the Drude
+      peak of a metal). A finite T samples the occupation factor on the
+      energy nodes, so it needs T above their spacing, about delta/7
     scale : float
       half width of the rescaled spectrum, default from Lanczos padded by 5%
     memory : float

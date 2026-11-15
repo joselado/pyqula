@@ -362,3 +362,115 @@ def test_singleshot_does_not_depend_on_the_memory_budget():
     assert kpmkubo._resolvent_batches(60, 120, len(fermis), memory) == (4, 4)
     s1 = h.get_dc_conductivity(memory=memory, **kw)
     assert np.max(np.abs(s1-s0)) < 1e-10*np.max(np.abs(s0))
+
+
+@pytest.mark.parametrize("fermi,w", [(0.5, 0.01), (0.5, -0.01), (0.5, 1.3),
+        (-1.69, 0.05), (0.5, 0.)])
+def test_box_weights_integrate_the_chebyshev_series_exactly(fermi, w):
+    """At T=0 the occupation factor is a box, 1/|w| between fermi-w and
+    fermi, and its weights on the Chebyshev-Gauss nodes integrate every
+    cos(k theta), with k well below the number of nodes, over the box in
+    closed form, for a box far narrower than the node spacing, a box of
+    the other sign, a wide box, a box cut at the edge of the rescaled
+    spectrum, and the w -> 0 limit, the value at the Fermi level divided
+    by dE/dtheta = a sin(theta)"""
+    ne, a, b = 256, 2., 0.3
+    q = kpmkubo._box_weights(ne, fermi, w, a, b)
+    th = np.pi*(np.arange(ne)+0.5)/ne
+    x = lambda E: np.clip((E-b)/a, -1., 1.)
+    for k in [0, 1, 7, 40]:
+        if w == 0.:
+            t0 = np.arccos(x(fermi))
+            ref = np.cos(k*t0)/(a*np.sin(t0))
+        else:
+            lo, hi = fermi-max(w, 0.), fermi-min(w, 0.)
+            t1, t2 = np.arccos(x(hi)), np.arccos(x(lo))
+            ref = (t2-t1) if k == 0 else (np.sin(k*t2)-np.sin(k*t1))/k
+            ref = ref/abs(w)
+        assert abs(np.sum(q*np.cos(k*th))-ref) < 1e-8, (k, ref)
+
+
+def _box_reference(st, mu, w, fermi, n=200):
+    """pi/|w| times the integral of rho_ab(E,E+w) over the box between
+    fermi-w and fermi, with rho_ab(E,E') = sum_nm mu_nm phi_n(E') phi_m(E)
+    the double series of the module docstring, by Gauss-Legendre on the box
+    itself, so no node of absorptive() is used"""
+    a, b, M = st.a, st.b, st.M
+    lo, hi = fermi-max(w, 0.), fermi-min(w, 0.)
+    xg, wg = np.polynomial.legendre.leggauss(n)
+    E = (hi-lo)*xg/2. + (hi+lo)/2.
+
+    def phi(E): # phi_n(E), (M,len(E))
+        x = (E-b)/a
+        return kpmkubo._phi(x, M)/(np.pi*a*np.sqrt(1.-x**2))
+    rho = np.einsum("abnm,nj,mj->abj", mu, phi(E+w), phi(E))
+    return np.pi*(rho@(wg*(hi-lo)/2.))/abs(w)
+
+
+@pytest.mark.parametrize("on_node", [True, False])
+def test_zero_temperature_absorption_is_the_box_integral(on_node):
+    """At T=0 the absorptive part is pi/|w| times the integral of the
+    double Chebyshev series rho(E,E+w) over the box between fermi-w and
+    fermi. On a metallic cell with exact moments it agrees with that
+    integral done by Gauss-Legendre on the box, for boxes 20 and 3 times
+    narrower than the node spacing, a few spacings wide, much wider, and
+    of the other sign, with the Fermi level on a node and between two.
+
+    The box used to be sampled on the nodes, so a box narrower than their
+    spacing held zero or one of them and gave 0 or several times the
+    integral"""
+    h = _disordered_cell()
+    h.shift_fermi(1.2) # the Fermi level in the valence band, a metal
+    st = kpmkubo._Setup(h, nk=2, npol=60)
+    mu = kpmkubo.exact_moments(st)
+    ne = 4*st.M
+    E = st.a*np.cos(np.pi*(np.arange(ne)+0.5)/ne) + st.b
+    j = np.argmin(np.abs(E-0.05))
+    spacing = abs(E[j+1]-E[j])
+    fermi = E[j] if on_node else E[j] + 0.37*(E[j+1]-E[j])
+    ws = np.array([spacing/20., spacing/3., 2.5*spacing, 0.4, -spacing/7.])
+    out = kpmkubo.absorptive(st, mu, ws, fermi=fermi, T=0.)
+    ref = [_box_reference(st, mu, w, fermi) for w in ws]
+    scale = max(np.max(np.abs(r)) for r in ref)
+    assert scale > 1e-3 # a real signal
+    d = st.dirs
+    for iw in range(len(ws)):
+        assert np.max(np.abs(out[iw][np.ix_(d, d)]-ref[iw])) < 1e-6*scale, \
+                ws[iw]
+
+
+def test_zero_temperature_drude_peak_is_smooth_and_matches_the_bands():
+    """A clean ring of 400 sites with the Fermi level at 0.1 in the band
+    has a Drude peak D delta/(w^2 + delta^2), with D = sqrt(4 - mu^2)/pi.
+    At T=0 the KPM peak is a smooth function of w down to w = 0, its top,
+    so a frequency 64 times below delta, far below the spacing of the
+    energy nodes (about delta/7), gives the w = 0 value to 1e-3, and the
+    whole peak follows the band calculation (integration="grid" at
+    T=0.01 on 4000 k-points, the chain itself) to the few percent of the
+    Lorentz kernel. The band calculation takes the line width the KPM
+    realizes with its integer number of polynomials, 0.197 for 0.2, and
+    the Fermi level is near the center, where the kernel is not narrowed.
+
+    The occupation box used to be sampled on the nodes: zero at w = 0,
+    and 0 or several times the peak below the node spacing"""
+    fermi = 0.1
+    g = geometry.chain().get_supercell(400)
+    h = g.get_hamiltonian(has_spin=False, is_sparse=True)
+    st = kpmkubo._Setup(h, delta=0.2, kernel="lorentz")
+    delta = st.delta # the line width of npol polynomials
+    assert abs(delta-0.2) < 0.01
+    ws = delta*np.array([0., 1./64, 1./32, 1./16, 1./8, 1./2, 1., 2.])
+    ws, s = conductivity.optical_conductivity(h, ws, integration="kpm",
+            T=0., npol=st.npol, fermi=fermi, kernel="lorentz",
+            trace="exact", reactive=False, component="xx")
+    s = s.real
+    h0 = geometry.chain().get_hamiltonian(has_spin=False)
+    h0.shift_fermi(-fermi) # the band path occupies the states below zero
+    ws, s0 = conductivity.optical_conductivity(h0, ws, nk=4000, T=0.01,
+            delta=delta, component="xx")
+    s0 = s0.real
+    D = np.sqrt(4.-fermi**2)/np.pi
+    assert abs(s0[0]-D/delta) < 0.02*D/delta # the reference is the peak
+    assert abs(s[1]-s[0]) < 1e-3*s[0] # w = delta/64 against w = 0
+    assert np.all(np.diff(s) < 0.) # the peak falls monotonically
+    assert np.max(np.abs(s-s0)) < 0.05*s0[0]
