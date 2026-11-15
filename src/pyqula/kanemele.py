@@ -288,12 +288,12 @@ def add_kane_mele(self,t,**kwargs):
       self.ty = self.ty + m 
       #################
       r2 = [ri + 1*g.a1 + 1*g.a2 for ri in g.r] # second vectors
-      m = generalized_kane_mele(g.r,r2,rs,fun=t)
+      m = generalized_kane_mele(g.r,r2,rs,fun=t,**kwargs)
       m = self.spinful2full(m) # convert the matrix
       self.txy = self.txy + m 
       #################
       r2 = [ri + 1*g.a1  -1*g.a2 for ri in g.r] # second vectors
-      m = generalized_kane_mele(g.r,r2,rs,fun=t)
+      m = generalized_kane_mele(g.r,r2,rs,fun=t,**kwargs)
       m = self.spinful2full(m) # convert the matrix
       self.txmy = self.txmy + m
     else:
