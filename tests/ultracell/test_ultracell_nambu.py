@@ -240,3 +240,23 @@ def test_uniform_pairing_with_a_cut_is_the_supercell(fixed_mu):
     c = np.concatenate([4*i+2,4*i+3,4*i+2,4*i+3])
     fz = frozen_entries(b,ks,frozen,{(0,0,0): (r,c)})[(0,0,0)]
     assert np.max(np.abs(fz))>1e-3
+
+
+@pytest.mark.parametrize("fixed_mu",[False,True])
+def test_a_cut_below_the_gap_is_exact_for_a_uniform_pairing(fixed_mu):
+    """A uniform attractive U at zero modulation, cut at |E|<=0.2, below
+    the quasiparticle gap, so the ultracell keeps no state at all and every
+    negative BdG state is frozen. The frozen density holds the whole paired
+    state, so the pairing and the energy are those of "ed"; a cut this
+    small raised before, because the guards took the dropped states for
+    states lost below the Fermi level"""
+    h,hs = nambu_chain(v=0.)
+    kw = dict(U=-2.5,mf="swave",nk=3,maxerror=1e-11,verbose=0,write=False)
+    if fixed_mu: kw["mu"] = -1.2
+    else: kw["filling"] = 0.28
+    u2,e2 = Ultracell(h,hs,emax=0.2).get_mean_field_hamiltonian(
+            return_total_energy=True,**kw)
+    h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
+            integration="ed",**kw)
+    assert abs(e2-e3)<1e-8
+    assert same_state(u2,h3)<1e-7

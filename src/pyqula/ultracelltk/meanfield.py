@@ -384,9 +384,12 @@ class SparseBackend():
         as fermi_level requires of a filling"""
         if h is not self.h: # a fixed chemical potential, at zero energy
             states = self.solve(h)
-            require_kept_above(states.eigenvalues(),states.n,self.delta,
-                    states.basis.emax,"the chemical potential",
-                    nfrozen=states.nfrozen)
+            # a BdG window (-emax,emax), with a center, drops the mirror of
+            # the frozen states, which are empty, so nothing is lost above
+            if states.basis.center is None:
+                require_kept_above(states.eigenvalues(),states.n,self.delta,
+                        states.basis.emax,"the chemical potential",
+                        nfrozen=states.nfrozen)
             require_frozen_below(states.frozen_eigenvalues(),self.delta,
                     states.basis.emin,"the chemical potential")
         return self.entries(needed)
@@ -448,6 +451,18 @@ class SparseBackend():
             H = ultracell_matrix(b,hkgen(k),k,E,U,valid)
             esk.append(eigh(H,eigvals_only=True,overwrite_a=True))
             nfrozen += int(np.sum(validf))
+        kept = sum(len(e) for e in esk)
+        total = hn.intra.shape[0]*len(ks)
+        if b.hopp is not None and int(round(total*filling))==kept+nfrozen \
+                and kept+nfrozen<total:
+            # every kept state is full, and the window is centered in a gap
+            # of the periodic part: the dropped states lie above
+            # center+emax, so the Fermi level is between the highest
+            # occupied state and that edge; with nothing kept, the center.
+            # A cut below the quasiparticle gap gives this case
+            tops = [np.max(e) for e in esk if len(e)>0]
+            top = max(tops) if len(tops)>0 else b.center+b.emin
+            return (top + b.center + b.emax)/2.
         return fermi_level(esk,hn.intra.shape[0],filling,T=self.delta,
                 nfrozen=nfrozen)
     def normal_compressibility(self,h,filling,df=0.05):
