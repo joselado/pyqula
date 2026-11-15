@@ -383,11 +383,19 @@ def add_pairing_to_hamiltonian(self,**kwargs):
     rcut = getattr(df,"rcut",None) # range of the pairing, if it is known
     blocks = {(0,0,0): pairing_block(df,r1=r,r2=r,rcut=rcut)} # intra cell
     if self.dimensionality>0:
-      for d in self.geometry.neighbor_directions(): # loop over directions
-        if d.dot(d)<0.0001: continue # skip onsite
+      # a pairing of known range goes to every cell within it, with a
+      # range per direction (cells_within); the box of geometry.ncells=2
+      # cells lost a pairing beyond two cells, as nn=3 on the chain. A
+      # callable has no known range and keeps the box
+      if rcut is None: cells = self.geometry.neighbor_directions()
+      else:
+          from .specialhopping import cells_within
+          cells = cells_within(self.geometry,rcut)
+      for d in cells: # loop over directions
+        d = tuple(int(di) for di in d)
+        if d==(0,0,0): continue # skip onsite
         r2 = self.geometry.replicas(d=d) # positions
-        blocks[tuple(int(di) for di in d)] = pairing_block(df,r1=r,r2=r2,
-                rcut=rcut)
+        blocks[d] = pairing_block(df,r1=r,r2=r2,rcut=rcut)
     callables = [name for name in ("d","delta","mode")
                    if callable(kwargs.get(name))]
     check_periodic_pairing(blocks,callables=callables)
@@ -399,11 +407,11 @@ def add_pairing_to_hamiltonian(self,**kwargs):
         self.turn_multicell()
 #        print("Converting Hamiltonian to multicell")
       from .multicell import Hopping
-      for d in self.geometry.neighbor_directions(): # loop over directions
+      for d in blocks: # loop over directions
         # this is a workaround to be able to do triplets
         # do it for +k and -k
-        if d.dot(d)<0.0001: continue # skip onsite
-        m = embed_pairing_block(blocks[tuple(int(di) for di in d)])
+        if d==(0,0,0): continue # skip onsite
+        m = embed_pairing_block(blocks[d])
 #        m2 = add_pairing(df,r1=r,r2=r2) # new matrix, the other way
         m2 = m
         if np.max(np.abs(m))>0.0001: # non zero
