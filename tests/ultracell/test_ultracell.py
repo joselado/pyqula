@@ -213,6 +213,43 @@ def test_cut_states_in_real_space_are_the_rayleigh_ritz_states():
     assert np.max(np.abs(np.real(np.sum(Phi.conj()*(HS@Phi),axis=0))-es))<1e-10
 
 
+@pytest.mark.parametrize("model",["honeycomb","chain","cubic"])
+def test_rebuilt_basis_diagonalizes_the_block_of_each_momentum(model):
+    """The rebuilt basis comes from the hoppings of the supercell averaged
+    over its cells. The block of each folded momentum on itself, the
+    supercell projected on the orbital Bloch sums of that momentum, must
+    have the same lowest levels and the same states, with modulated
+    hoppings, an exchange field and spin-orbit coupling"""
+    if model=="honeycomb": h,hs = modulated_honeycomb((4,3))
+    elif model=="chain":
+        h = geometry.chain().get_hamiltonian(has_spin=False)
+        hs = h.get_supercell(5)
+        hs.add_onsite(lambda r: 0.4*np.cos(2*np.pi*r[0]/5)+0.1)
+        modulate_hoppings(hs,lambda r: 0.3*np.sin(2*np.pi*r[0]/5))
+    else:
+        h = geometry.cubic_lattice().get_hamiltonian(has_spin=False)
+        hs = h.get_supercell([3,2,2])
+        x = fractional(hs)
+        hs.add_onsite(lambda r: 0.3*np.sin(2*np.pi*(x(r)[0]+x(r)[2])))
+        modulate_hoppings(hs,lambda r: 0.2*np.cos(2*np.pi*x(r)[1]))
+    u = h.get_ultracell(hs,emax=0.3,rebuild_basis=True)
+    b = u.basis
+    kS = np.array([0.31,0.17,0.43])
+    E,U,valid = b.states(kS)
+    assert 0<np.sum(valid)<b.N*b.norb # a cut
+    hk = u.hk(kS)
+    I = [np.identity(b.norb,dtype=np.complex128)]*b.N # every orbital
+    for iq in range(b.N):
+        B = b.basis_block(kS,I,iq) # orbital Bloch sums of this momentum
+        heff = B.conj().T@np.asarray(hk@B)
+        e = eigh(heff,eigvals_only=True)
+        m = np.sum(valid[iq])
+        if m==0: continue # nothing kept at this momentum
+        assert np.max(np.abs(E[iq,0:m]-e[0:m]))<1e-12
+        w = U[iq][:,0:m] # the kept states diagonalize the block
+        assert np.max(np.abs(w.conj().T@heff@w-np.diag(E[iq,0:m])))<1e-12
+
+
 def test_cut_observables_keep_their_sum_rules():
     """With a cut and a modulation, the LDOS summed over the sites is N
     times the DOS per unit cell; at zero modulation, the unfolded spectral
