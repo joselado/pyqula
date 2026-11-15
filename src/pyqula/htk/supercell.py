@@ -45,7 +45,9 @@ def bulk2film(hin,n=10):
 def matrix_supercell(hin,M,sparse=True):
     """The supercell Hamiltonian of h along an integer matrix M, with the
     lattice vectors A_S = M A (rows, M of shape 3x3, the identity beyond the
-    dimensionality), for any M, diagonal or not.
+    dimensionality), for any M, diagonal or not. On a d-dimensional lattice
+    M can also be dxd, and it is then padded to 3x3 with 1 along the
+    missing directions.
 
     The geometry is g.get_supercell(M), which records the cell R and the
     unit-cell site of every site. A hopping of the unit cell from orbital a
@@ -64,9 +66,16 @@ def matrix_supercell(hin,M,sparse=True):
     h = hin.get_multicell() # a copy
     if h.dimensionality==0: return h
     dim = h.dimensionality
+    Mf = np.array(M,dtype=float)
+    if Mf.shape not in [(3,3),(dim,dim)]:
+        raise ValueError("a supercell matrix of a "+str(dim)+"-dimensional "
+                "lattice is "+str(dim)+"x"+str(dim)+" or 3x3, got shape "
+                +str(Mf.shape))
+    M3f = np.identity(3) # padded with 1 along the missing directions
+    M3f[0:Mf.shape[0],0:Mf.shape[1]] = Mf
+    Mf = M3f
     # rounded and not truncated, so that a matrix computed in floating
     # point, with 1.9999999999 for 2, is the matrix of those integers
-    Mf = np.array(M,dtype=float)
     if not np.all(np.abs(Mf-np.round(Mf))<1e-6): # also refuses a nan
         raise ValueError("the supercell matrix must have integer entries, "
                 "got "+str(Mf.tolist()))

@@ -759,13 +759,15 @@ class Hamiltonian():
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
     def get_supercell(self,nsuper,**kwargs):
       """The supercell of nsuper repetitions along the lattice vectors (a
-      number, or one per direction), or along the rows of an integer 3x3
-      matrix M, A_supercell = M A, for any M (htk.supercell.matrix_supercell)"""
+      number, or one per direction), or along the rows of an integer
+      matrix M, A_supercell = M A, for any M (htk.supercell.matrix_supercell).
+      M is 3x3, or dxd on a d-dimensional lattice, padded with 1 along
+      the missing directions"""
       # the contract is a new Hamiltonian, so the no-op cases return a copy
       # and never an alias of self, which the caller would then mutate
       if nsuper is None: return self.copy() # do nothing
       if self.dimensionality==0: return self.copy() # nothing to replicate
-      if np.array(nsuper).shape==(3,3): # a supercell matrix, A_S = M A
+      if np.ndim(nsuper)==2: # a supercell matrix, A_S = M A
           from .htk.supercell import matrix_supercell
           return matrix_supercell(self,nsuper,**kwargs)
       try: 

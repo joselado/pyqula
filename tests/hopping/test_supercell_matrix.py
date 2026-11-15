@@ -137,6 +137,34 @@ def test_geometry_rounds_a_float_matrix():
         g.get_supercell(np.array(SQRT3,dtype=float)+0.5*np.identity(3))
 
 
+def spectrum(h,k):
+    return eigh(dense(h.get_hk_gen()(np.array(k,dtype=float))),
+            eigvals_only=True)
+
+
+def test_matrix_of_the_dimensionality_is_padded():
+    """A dxd supercell matrix on a d-dimensional lattice is the 3x3 one
+    with 1 along the missing directions, so both give the same supercell,
+    and a matrix of another shape is refused with a message"""
+    h = geometry.honeycomb_lattice().get_hamiltonian()
+    h.add_rashba(0.2)
+    h.add_sublattice_imbalance(0.2)
+    hs2 = h.get_supercell([[2,1],[-1,1]])
+    hs3 = check(h,SQRT3)
+    assert hs2.intra.shape==hs3.intra.shape
+    k = [0.23,0.41,0.]
+    assert np.max(np.abs(spectrum(hs2,k)-spectrum(hs3,k)))<1e-10
+    with pytest.raises(ValueError,match="supercell matrix"):
+        h.get_supercell([[2,1,0],[-1,1,0]])
+    h = geometry.chain().get_hamiltonian()
+    h.add_exchange([0.,0.,0.2])
+    hs1 = h.get_supercell([[3]])
+    hs3 = check(h,[[3,0,0],[0,1,0],[0,0,1]])
+    assert hs1.intra.shape==hs3.intra.shape
+    k = [0.17,0.,0.]
+    assert np.max(np.abs(spectrum(hs1,k)-spectrum(hs3,k)))<1e-10
+
+
 def test_same_as_the_supercell_of_the_geometry():
     """For a model the geometry builds by itself, the supercell of h and
     the Hamiltonian of the supercell geometry are the same matrices up to
