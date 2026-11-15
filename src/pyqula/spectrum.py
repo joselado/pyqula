@@ -492,7 +492,13 @@ def get_fermi_energy_T(es,filling,T=0.):
     # pinning mu to a partially occupied level -- a different convention
     # from the one the rest of the library uses, not a refinement of it
     ntarget = int(round(len(es)*filling)) # number of electrons requested
-    if ntarget<=0 or ntarget>=len(es): return mu0 # empty or full
+    # Full or empty: no finite mu holds exactly every state (or none) at
+    # T>0, and the T=0 cut, 1e-5 above the top state, occupies that state
+    # only by 1/(1+exp(-1e-5/T)), about 1/2 once T >> 1e-5. So mu goes 40 T
+    # beyond the last state, where each state misses exp(-40) ~ 4e-18 of
+    # an electron, below the 1e-9 relative count accepted below
+    if ntarget>=len(es): return max(mu0,np.max(es)+40.*T) # full
+    if ntarget<=0: return min(mu0,np.min(es)-40.*T) # empty
     from scipy.special import expit
     def nelec(mu): # number of electrons at this chemical potential
         return np.sum(expit(-(es-mu)/T)) # Fermi-Dirac occupations
