@@ -47,6 +47,33 @@ worth knowing. The frozen states do not respond, so the modulated part of
 the pairing converges only slowly, about logarithmically, with emax. And
 the count by energy can change the number of kept states by a multiplet
 between iterations.
+
+A paired state with no gap on the mesh (a pairing that died, as under a
+Zeeman field) does not hold a filling with any chemical potential, and the
+shell of ultracell levels at zero energy is then filled in part, by
+scftk.superscf.ShellFilling, the same object as for "ed"
+(SparseBackend.fill_shell). The levels of the shell are eigenstates of
+the ultracell matrix, so they lie in the kept states: the frozen ones are
+below -emax and stay full, and the fill is a change of the occupations of
+a few kept states, added at the entries the mean field reads. Their
+charge is taken on the Nambu orbitals of the supercell.
+
+With a cut the fill has two limits, both measured on the chain of
+tests/ultracell/test_ultracell_shell.py at T=1e-7. The Fermi level of the
+normal state comes from the electrons in a window of their own, centered
+at the Fermi level of their lattice-periodic part (normal_fermi), while
+the BdG window is centered at the chemical potential. A level at the
+momenta of the shell that is in one of the two windows only can move the
+levels of the shell off zero, and the fill then needs a shell that
+reaches them, 40 T wide: at 4 of 107 cuts between 0.05 and 2.7 the charge
+kept its error, with the levels 7e-4 to 0.027 off zero, and at the two
+ends of that range it was held again from T=1e-4 and from T=1e-3. Such a
+level does not always move them (two cuts with one held the charge).
+And the count by energy can change the kept states between iterations:
+at one of 54 cuts with a potential of 0.5 the loop goes round between 42
+kept states, where the shell is filled, and 38, where it cannot hold the
+charge, and does not converge, where without the fill it ended with the
+charge error.
 """
 
 import numpy as np
@@ -201,6 +228,13 @@ def smearing(T):
     return nonzero_smearing(T)
 
 
+def occupations(es,delta):
+    """The Fermi-Dirac occupations of the sorted levels es that are not
+    empty; the others, above empty_ratio smearings, are left out"""
+    nocc = int(np.sum(es<=empty_ratio*delta))
+    return 1./(1.+np.exp(es[0:nocc]/delta))
+
+
 def occupied(states,ik,delta):
     """The Fermi-Dirac occupations and the eigenvectors on the supercell
     orbitals of the occupied states at kpoint ik, a chunk of states at a
@@ -208,8 +242,8 @@ def occupied(states,ik,delta):
     es = states.es[ik] + states.shift
     # eigh sorts the eigenvalues, so the occupied states are the first
     # ones and a slice of the eigenvectors is a view, not a copy
-    nocc = int(np.sum(es<=empty_ratio*delta))
-    occ,vs = 1./(1.+np.exp(es[0:nocc]/delta)),states.vs[ik][:,0:nocc]
+    occ = occupations(es,delta)
+    vs = states.vs[ik][:,0:len(occ)]
     for sl in state_chunks(states.basis,len(occ)):
         yield occ[sl],states.real_space(ik,vs[:,sl])
 
@@ -313,6 +347,47 @@ def frozen_entries(basis,ks,frozen,needed):
     return out
 
 
+def shell_levels(states,shell,delta):
+    """Hand to shell, a scftk.superscf.ShellFilling that is armed, the
+    ultracell levels with |E| < shell.tol of every kpoint: their energies,
+    their vectors on the Nambu orbitals of the supercell, where the shell
+    takes their charge, and the occupations dm_entries gave them. Only
+    these few states are taken to real space"""
+    for ik,k in enumerate(states.ks):
+        es = states.es[ik] + states.shift
+        s = np.nonzero(np.abs(es)<shell.tol)[0]
+        if len(s)==0: continue
+        occ = np.zeros(len(es))
+        o = occupations(es,delta)
+        occ[0:len(o)] = o
+        Phi = states.real_space(ik,states.vs[ik][:,s])
+        shell.collect(pad3(k)[None,:],es[s][None,:],Phi[None,:,:],
+                occ[s][None,:])
+
+
+def shell_adder(needed,vals,nkpoints):
+    """The add of scftk.superscf.ShellFilling.fill for a density matrix
+    kept at the entries needed, {d: (rows,cols)}, whose values vals,
+    {d: values}, are changed in place: the change of a filled shell,
+    sum_s c_s exp(2 pi i k_s.d)/Nk conj(B[i,s]) B[j,s], at those entries
+    only, as ShellFilling.add_dense does for every entry. pair_sums is
+    compiled for real weights, so the real and the imaginary part of the
+    weights, which the Bloch phase makes complex away from d=0, are
+    summed one after the other"""
+    def add(dm,ks,B,c):
+        B = np.ascontiguousarray(B)
+        for d,(r,cols) in needed.items():
+            r = np.asarray(r,dtype=np.int64)
+            cols = np.asarray(cols,dtype=np.int64)
+            ph = np.exp(2j*np.pi*(ks@pad3(d)))/nkpoints
+            w = (c*ph[:,None]).reshape(-1)
+            vals[d] += pair_sums(B,np.ascontiguousarray(w.real),r,cols)
+            if np.any(w.imag!=0.):
+                vals[d] += 1j*pair_sums(B,np.ascontiguousarray(w.imag),
+                        r,cols)
+    return add
+
+
 class SparseBackend():
     """The ultracell backend of the sparse engines of the mean field: the
     density matrix at the entries the mean field reads, as csr matrices,
@@ -330,7 +405,10 @@ class SparseBackend():
     A Nambu h is not shifted rigidly by a chemical potential, so the
     spinful loop shifts it first and calls dm(h), with the Fermi level of
     superscf.BdGFermiLevel, whose search and compressibility are
-    normal_fermi and normal_compressibility"""
+    normal_fermi and normal_compressibility, and with shell= the
+    ShellFilling of that Fermi level, which fills the shell of levels at
+    zero energy in part when the paired state has no gap on the mesh
+    (fill_shell)"""
     def __init__(self,nk=1,T=None,filling=None):
         self.nk = nk
         # the occupations and the Fermi search at the same smearing, as
@@ -347,12 +425,40 @@ class SparseBackend():
     def solve(self,h):
         self.states,self.h = MeshStates(h,nk=self.nk),h
         return self.states
-    def entries(self,needed):
+    def entries(self,needed,shell=None):
         n = self.states.n
         vals = dm_entries(self.states,needed,self.delta)
-        return {d: csr_matrix((vals[d],(np.asarray(r),np.asarray(c))),
-            shape=(n,n),dtype=np.complex128)
-            for d,(r,c) in needed.items()}
+        def matrices():
+            return {d: csr_matrix((vals[d],(np.asarray(r),np.asarray(c))),
+                shape=(n,n),dtype=np.complex128)
+                for d,(r,c) in needed.items()}
+        dm = matrices()
+        if shell is not None and self.fill_shell(shell,dm,needed,vals):
+            dm = matrices() # with the change of the fill, added to vals
+        return dm
+    def fill_shell(self,shell,dm,needed,vals):
+        """Fill in part the shell of ultracell levels at zero energy of
+        the Nambu Hamiltonian of the states kept, at a filling, so that
+        its density matrix dm holds the charge. shell is the
+        scftk.superscf.ShellFilling of its Fermi level, which decides
+        whether it is armed and whether it fills, as for "ed". The change
+        is added to vals, the values of dm at the entries needed; returns
+        whether the shell was filled.
+
+        The levels of the shell are eigenstates of the ultracell matrix,
+        in the kept states, so the frozen density is not touched: the
+        frozen states are below -emax and stay full. A shell of 40
+        smearings holds no frozen level, since dm() refuses one within
+        empty_ratio = 50 smearings of zero (require_frozen_below), and
+        the shell of T=0, 1e-6 of a level spacing, holds none for any cut
+        wider than that"""
+        states = self.states
+        if not shell.start(self.h,self.delta,len(states.ks)):
+            return False # the pairing lives
+        if shell.held_already(dm): return False # no state to real space
+        shell_levels(states,shell,self.delta)
+        shell.fill(dm,add=shell_adder(needed,vals,len(states.ks)))
+        return shell.fired
     def dm_with_fermi(self,h,needed,filling):
         """The density matrix of h shifted by its Fermi level at filling,
         and that level; the caller shifts h by it, as for
@@ -376,12 +482,14 @@ class SparseBackend():
                 states.basis.emin,"the Fermi level of filling="
                 +str(filling))
         return fermi
-    def dm(self,h,needed):
+    def dm(self,h,needed,shell=None):
         """The density matrix of h, already shifted by its chemical
         potential, from the states of shift() if they were those of h.
         Otherwise the caller shifted h by a fixed mu, which with a cut
         must lie below the highest kept state and above the frozen ones,
-        as fermi_level requires of a filling"""
+        as fermi_level requires of a filling. shell: None, or for a Nambu
+        h at a filling the scftk.superscf.ShellFilling of its Fermi level,
+        see fill_shell"""
         if h is not self.h: # a fixed chemical potential, at zero energy
             states = self.solve(h)
             # a BdG window (-emax,emax), with a center, drops the mirror of
@@ -392,7 +500,7 @@ class SparseBackend():
                         nfrozen=states.nfrozen)
             require_frozen_below(states.frozen_eigenvalues(),self.delta,
                     states.basis.emin,"the chemical potential")
-        return self.entries(needed)
+        return self.entries(needed,shell=shell)
     def shift(self,h):
         """h shifted by its Fermi level at self.filling, which h.fermi
         keeps; the states stay for dm(h)"""

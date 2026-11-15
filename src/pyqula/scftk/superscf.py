@@ -300,7 +300,14 @@ class ShellFilling:
     Use: armed = start(h,T,nkpoints) before a density matrix, and when
     armed, collect(ks,es,vs,occ) on the eigenpairs of every batch (only
     the k-points with levels in the shell are kept), and fill(dm) at the
-    end."""
+    end.
+
+    fill(dm,add=...) takes the routine that adds the change of the fill
+    to the density matrix, for one that is not a dense matrix per
+    direction: the ultracell keeps only the entries the mean field reads,
+    and adds the change there (ultracelltk.meanfield.shell_adder), with
+    the vectors of the shell on the orbitals of the supercell. The
+    occupations, the energy and the chemical potential are the same."""
     width = 40. # the shell is |E| < width*T
     floor = 1e-6 # at T=0, the shell in units of the level spacing
     qzero = 1e-10 # a smaller |q| is a level with no charge
@@ -323,7 +330,6 @@ class ShellFilling:
         """Before the density matrix of h on a mesh of nkpoints, at T.
         Returns whether the shell is armed, the pairing being dead; if not,
         the density matrix is computed as if there were no shell"""
-        from .. import algebra, operators
         self._reset()
         self.nkpoints = nkpoints
         spacing = 1./(self.kappa*nkpoints) # mean level spacing at mu
@@ -331,8 +337,11 @@ class ShellFilling:
         self.ts = self.tol/self.width # the smearing of the shell
         if self.pairing>=self.ts and self.window>=self.floor*spacing:
             return False # the pairing lives, the offset holds the charge
-        pe = np.array(algebra.todense(operators.get_electron(h))).diagonal()
-        self.tau = 2.*pe.real-1. # +1 on the electron components, -1 holes
+        # tau_z on the Nambu orbitals, +1 on the electrons (4i and 4i+1)
+        # and -1 on the holes, as pairing_amplitude reads them: the
+        # diagonal of 2 P_e - 1, without the matrix of P_e, which for a
+        # sparse supercell would be a dense one of its size
+        self.tau = np.where(np.arange(h.intra.shape[0])%4<2,1.,-1.)
         return True
 
     def held_already(self,dm):
@@ -429,10 +438,24 @@ class ShellFilling:
             out.append((R,on))
         return out,charge
 
-    def fill(self,dm):
+    def add_dense(self,dm,ks,B,c):
+        """Add the change of the fill to the dense density matrix dm,
+        {d: (n,n)}: sum_s c_s exp(2 pi i k_s.d)/Nk conj(B[i,s]) B[j,s],
+        with B (n, g l) the vectors of g k-points ks as columns, l of
+        them per k-point, and c (g,l) the change of their occupations"""
+        nk = float(self.nkpoints)
+        for d in dm:
+            ph = np.exp(2j*np.pi*(ks@np.array(d,dtype=float)))/nk
+            dm[d] = dm[d]+(B.conj()*(c*ph[:,None]).reshape(-1))@B.T
+
+    def fill(self,dm,add=None):
         """Fill the shell in part so that dm holds charge0, if test(dm)
         passes; dm is changed in place and returned. Sets correction,
-        (1/2) Tr H (rho_filled - rho), the change of the band energy"""
+        (1/2) Tr H (rho_filled - rho), the change of the band energy.
+        add(dm,ks,B,c) adds the change of the density matrix, add_dense
+        by default; a density matrix that is not a dense matrix per
+        direction gives its own, and only needs the electron diagonal of
+        dm[(0,0,0)] to be read by get_charge_bdg"""
         if not self.test(dm): return dm
         from scipy.optimize import brentq
         nk = float(self.nkpoints)
@@ -447,6 +470,7 @@ class ShellFilling:
             b *= 4.
             if b>1e12: return dm # the charge of the shell is too small
         y = brentq(error,-b,b,xtol=1e-14,rtol=1e-14,maxiter=500)
+        if add is None: add = self.add_dense
         change = 0.
         for ((ks,es,em,vs,occ,Q),(R,on)) in zip(self.groups,
                 self._occupations(y)[0]):
@@ -462,9 +486,7 @@ class ShellFilling:
             n = vs.shape[1]
             B = np.concatenate([ws,vs],axis=2).transpose(1,0,2).reshape(n,-1)
             c = np.concatenate([on,-occ],axis=1) # (g, 2m)
-            for d in dm:
-                ph = np.exp(2j*np.pi*(ks@np.array(d,dtype=float)))/nk
-                dm[d] = dm[d]+(B.conj()*(c*ph[:,None]).reshape(-1))@B.T
+            add(dm,ks,B,c)
         self.correction = change/nk/2. # the band energy is half the trace
         self.fired, self.mu = True, y*self.ts
         self.fraction = (self.charge0-self.c0)/(self.c1-self.c0) # filled
@@ -551,7 +573,8 @@ class BdGFermiLevel:
 
     No offset holds N0 in a state with no gap on the mesh, since N0 falls
     inside a jump of the staircase. That jump is the shell of levels at
-    zero energy, and the density matrices of "ed" and "triangle" fill it
+    zero energy, and the density matrices of "ed", "triangle" and the
+    ultracell (ultracelltk.meanfield.SparseBackend.fill_shell) fill it
     in part when they are given shell, the ShellFilling of this object:
     the shell is occupied at a chemical potential shifted inside it, set
     so that the charge is exactly N0, which in a shell degenerate at zero
@@ -608,7 +631,7 @@ class BdGFermiLevel:
         self.gain, self.last = 1., None
         self.flips, self.clipped, self.frozen = 0, 0, False
         # the partly filled shell of a gapless state, which the density
-        # matrices of "ed" and "triangle" take as shell=
+        # matrices of "ed", "triangle" and the ultracell take as shell=
         self.shell = ShellFilling(self.charge0)
 
     def compressibility(self,h,df=0.05):

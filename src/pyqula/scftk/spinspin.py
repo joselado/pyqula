@@ -1450,10 +1450,13 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 # a Nambu shift is -mu on the electrons and +mu on the
                 # holes, not a rigid one, so h is shifted first and then
                 # solved; the Fermi level is that of the paired state, as
-                # in the bdg_fermi branch below
+                # in the bdg_fermi branch below, and the shell of a
+                # gapless state is filled in part too, on the ultracell
+                # levels (ultracelltk.meanfield.SparseBackend.fill_shell)
                 if mu is None: h = bdg_fermi.shift(h, fermi_offset[0])
                 else: h.shift_fermi(-mu)
-                dm_lab = ultracell.dm(h, sparse_needed)
+                dm_lab = ultracell.dm(h, sparse_needed,
+                        shell=bdg_fermi.shell if mu is None else None)
                 if mu is None:
                     fermi_offset[0] = bdg_fermi.step(fermi_offset[0], dm_lab)
             elif mu is None:
@@ -1688,6 +1691,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     if bdg_fermi is not None: # the charge of the paired state, N-N0
         scf.charge_error = bdg_fermi.error
         bdg_fermi.warn(maxerror, scf.converged)
+        scf.shell = bdg_fermi.shell # its fill, fired, mu and correction
 
     if use_sparse_dm and not use_kpm:
         # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF
