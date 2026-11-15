@@ -41,9 +41,16 @@ delta-function part of the Lehmann formula of conductivity.py, so for exact
 moments it is the same number. The energy integral is done on
 Chebyshev-Gauss nodes, which absorb the 1/sqrt(1-x^2) of the first delta.
 At T=0 the occupation factor is a box of width w, which a small w puts
-between two nodes; there the rest of the integrand is interpolated by its
-Chebyshev series on the nodes and the box is integrated in closed form, so
-any w works (absorptive and _box_weights).
+between two nodes, and at a T below the node spacing the Fermi step falls
+between two nodes in the same way. Near the two Fermi edges the rest of
+the integrand is interpolated by its Chebyshev series on the nodes and
+integrated against the occupation factor exactly: in closed form for the
+box at T=0, and with the exact cosine moments of the thermal factor at
+T > 0, which is the box averaged over the Fermi level with -df/dE. Away
+from the edges the midpoint rule on the nodes is exact. So any w and any
+T work, w=0 included, and a T of several node spacings, as the default
+T = delta, gives the midpoint rule on the nodes to rounding (absorptive
+and _box_weights).
 
 2) The DC tensor (Kubo-Bastin), Garcia, Covaci and Rappoport, PRL 114,
 116602 (2015), Eq. (3), re-derived here from
@@ -85,6 +92,7 @@ and B <= M the number of polynomials stored at once. B is set by the
 memory= budget. When B < M the left set is recomputed M/B times, so a
 smaller memory costs more sparse products but never more memory.
 """
+import functools
 import numpy as np
 import scipy.sparse as sp
 from numba import jit, prange
@@ -479,14 +487,6 @@ def _fermi(E,mu,T):
     return 1./(1.+np.exp(np.clip((E-mu)/T,-500.,500.)))
 
 
-def _ratio(E,w,mu,T):
-    """[f(E) - f(E+w)]/w, with its w -> 0 limit -df/dE"""
-    if abs(w)>1e-10: return (_fermi(E,mu,T)-_fermi(E+w,mu,T))/w
-    if T<=0.: return np.zeros(E.shape)
-    f = _fermi(E,mu,T)
-    return f*(1.-f)/T
-
-
 def _phi(x,M):
     """(2 - delta_n0) T_n(x) for n < M, (M,len(x))"""
     out = np.cos(np.arange(M)[:,None]*np.arccos(np.clip(x,-1.,1.))[None,:])
@@ -518,21 +518,22 @@ def _contract(x2,idx,wts,Y):
     return out
 
 
-def _box_weights(ne,fermi,w,a,b):
+def _box_weights(ne,fermi,w,a,b,T=0.):
     """Weights q_j of the ne Chebyshev-Gauss nodes x_j = cos(theta_j),
-    theta_j = pi (j + 1/2)/ne, for the absorptive part at T=0,
+    theta_j = pi (j + 1/2)/ne, for the absorptive part,
 
       pi int dE [f(E) - f(E+w)]/w rho(E,E+w) = pi sum_j q_j G_j,
 
     with G(theta) = a sin(theta) rho(E,E+w) at E = a cos(theta) + b, the
     integrand in theta (dE = a sin(theta) dtheta), and G_j its value at the
-    node j (see absorptive).
+    node j (see absorptive), at any temperature T >= 0.
 
     At T=0 the occupation factor is a box: 1/|w| between fermi - w and
     fermi (between fermi and fermi + |w| for w < 0), zero elsewhere. The
     nodes are spaced by about pi a/ne, so a box narrower than that holds
-    zero or one of them, and the rule of the finite temperature,
-    q_j = r(E_j) pi/ne, then gives zero or several times the right value.
+    zero or one of them, and the midpoint rule, q_j = r(E_j) pi/ne, then
+    gives zero or several times the right value. At a finite T below the
+    spacing the Fermi step falls between two nodes in the same way.
 
     Here G is replaced by its Chebyshev interpolant on the same nodes,
 
@@ -587,9 +588,29 @@ def _box_weights(ne,fermi,w,a,b):
     window every node of the spectrum would enter the interpolant, and the
     edge of the rescaled spectrum, where the 1/sqrt(1 - x2^2) of the second
     delta function diverges, would ring into the box. With it the weights
-    are local, as at finite T, and that edge enters only through the
-    midpoint rule inside a box that reaches it, as before"""
+    are local, and that edge enters only through the midpoint rule inside
+    a box that reaches it.
+
+    At a finite T the same construction holds with the box replaced by the
+    thermal factor r(theta) = [f(E) - f(E+w)]/w,
+
+      q_j = psi_j W_j + (1 - psi_j) r(E_j) pi/ne,
+      W_j = (1/ne) [R_0 + 2 sum_{0<k<ne} cos(k theta_j) R_k],
+      R_k = int_0^pi r(theta) cos(k theta) dtheta,
+
+    with the same window psi at the two edges, fermi and fermi - w, since
+    r - r_box decays as exp(-|E - edge|/T) away from them and 1 - psi
+    vanishes wherever r is not smooth on the scale of the nodes. The
+    finite-T factor is the T=0 box averaged over the Fermi level,
+    f_T(E - mu) = int dmu' p(mu' - mu) Theta(mu' - E) with
+    p(x) = 1/(4 T cosh^2(x/2T)) = -df/dx, so the R_k are the box moments
+    averaged with p, and they are computed exactly at every T
+    (_thermal_moments). A T above a few node spacings makes r smooth on
+    the node scale: its cosine moments beyond k = ne fall as
+    exp(-pi^2 T/spacing), W_j is then r(E_j) pi/ne to rounding, and q_j is
+    the midpoint rule of the finite temperature. T -> 0 gives the box"""
     from scipy.fft import dct
+    if T>0.: return _thermal_weights(ne,fermi,w,a,b,T)
     lo,hi = fermi-max(w,0.),fermi-min(w,0.) # the box in energy
     x1,x2 = max((lo-b)/a,-1.),min((hi-b)/a,1.) # in x, cut to [-1,1]
     q = np.zeros(ne)
@@ -637,13 +658,283 @@ def _edge_window(th,the,tau):
     return 1.-(1.-chi(th))*(1.-chi(-th))*(1.-chi(2.*np.pi-th))
 
 
+# ---------------------------------------------------------------------------
+# finite temperature: the exact cosine moments of the thermal factor
+
+
+_SUPPORT = 44. # |E - edge|/T beyond which p and f - Theta are below 1e-18
+_ALIAS = 45. # exp(-45), the aliasing left by the fine midpoint rule
+_PANELS = np.array([0.,1.,3.,9.,27.,81.]) # Gauss panels from an edge, in T
+_GAUSS = np.polynomial.legendre.leggauss(24)
+
+
+def _fermi_x(x):
+    """1/(1 + e^x) for an array x, without overflow and with the tail
+    e^-x kept down to the smallest float"""
+    x = np.asarray(x,dtype=np.float64)
+    e = np.exp(-np.abs(x))
+    return np.where(x>0.,e/(1.+e),1./(1.+e))
+
+
+def _thermal_ratio(y,w,T,yw=None):
+    """r = [f(y) - f(y+w)]/w for the energies y measured from the Fermi
+    level, with the difference taken without cancellation: for u < v,
+    f(u) - f(v) = f(u) (1 - f(v)) (1 - exp(-(v-u)/T)). It is -df/dy =
+    f (1 - f)/T at w = 0. yw is y + w, passed when it is known to more
+    digits than the sum (near the edge at the Fermi level minus w)"""
+    if yw is None: yw = y+w
+    u,v = (yw,y) if w<0. else (y,yw)
+    fu,gv = _fermi_x(u/T),_fermi_x(-v/T) # f(u) and 1 - f(v)
+    if w==0.: return fu*gv/T
+    return fu*gv*(-np.expm1(-abs(w)/T))/abs(w)
+
+
+def _thermal_slope(y,w,T,yw=None):
+    """[p(y) - p(y+w)]/w with p = -df/dy = f (1 - f)/T, without
+    cancellation: p(u) - p(v) = [f(u) - f(v)] [1 - f(u) - f(v)]/T"""
+    if yw is None: yw = y+w
+    return _thermal_ratio(y,w,T,yw=yw)*(_fermi_x(-y/T)-_fermi_x(yw/T))/T
+
+
+def _rise(x0,e):
+    """arccos(x0) - arccos(x0 + e) for e >= 0, cut at arccos(x0) when
+    x0 + e passes 1, from tan(dtheta/2) = (x1 - x0)/(s0 + s1) as in
+    _box_weights, so a small e loses no digits"""
+    e = np.asarray(e,dtype=np.float64)
+    x1 = np.minimum(x0+e,1.)
+    out = 2.*np.arctan2(e,np.sqrt(1.-x0*x0)+np.sqrt(1.-x1*x1))
+    return np.where(x0+e>=1.,np.arccos(x0),out)
+
+
+def _fall(x0,e):
+    """arccos(x0 - e) - arccos(x0) for e >= 0, cut at pi - arccos(x0)"""
+    e = np.asarray(e,dtype=np.float64)
+    x1 = np.maximum(x0-e,-1.)
+    out = 2.*np.arctan2(e,np.sqrt(1.-x0*x0)+np.sqrt(1.-x1*x1))
+    return np.where(x0-e<=-1.,np.pi-np.arccos(x0),out)
+
+
+def _chirp(n,N):
+    """exp(i pi n^2/(2N)), the chirp of the transform of _exp_sums. For an
+    integer N the phase is reduced exactly, n^2 mod 4N, so a large n loses
+    no digits; a float N is only used for a step pi/N so small that the
+    phase stays small"""
+    if isinstance(N,int):
+        n = np.asarray(n,dtype=np.int64)
+        return np.exp(1j*np.pi*((n*n)%(4*N))/(2.*N))
+    n = np.asarray(n,dtype=np.float64)
+    return np.exp(1j*np.pi*(n*n)/(2.*N))
+
+
+def _exp_sums(g,N,K):
+    """S_k = sum_m g_m exp(i pi k m/N) for k < K, the Fourier sums of the
+    samples g on a grid of step pi/N, by Bluestein's chirp z-transform,
+    k m = [k^2 + m^2 - (k-m)^2]/2, so the cost is three FFTs of length
+    about len(g) + K, whatever N"""
+    from scipy.fft import fft,ifft,next_fast_len
+    Q = len(g)
+    L = next_fast_len(Q+K-1)
+    ch = _chirp(np.arange(max(Q,K)),N)
+    A = np.zeros(L,dtype=np.complex128)
+    A[:Q] = g*ch[:Q]
+    B = np.zeros(L,dtype=np.complex128)
+    B[:K] = np.conj(ch[:K])
+    if Q>1: B[L-Q+1:] = np.conj(ch[Q-1:0:-1])
+    c = ifft(fft(A)*fft(B))[:K]
+    return ch[:K]*c
+
+
+@functools.lru_cache(maxsize=64)
+def _fermi_excess(nu,a,b,T):
+    """G(nu) = int_0^pi [f(E - nu) - Theta(nu - E)] dtheta, E = a cos(theta)
+    + b, the difference between the cosine moment k=0 of the Fermi function
+    and of the step, by Gauss-Legendre on panels that start at the edge
+    theta(nu) and grow as 1, 3, 9, 27, 81 T in energy on each side, cut at
+    0 and pi. The integrand is smooth on each side and decays as
+    exp(-|E - nu|/T), and the pole of f at i pi T above the edge stays
+    well outside the Bernstein ellipse of every panel, so the panels and
+    their 24 nodes do not depend on T"""
+    x = (nu-b)/a
+    xc = min(max(x,-1.),1.)
+    th0 = np.arccos(xc)
+    y0 = 0. if -1.<x<1. else a*xc+b-nu # E(th0) - nu
+    xg,wg = _GAUSS
+    out = 0.
+    for side in (1.,-1.): # E above nu at theta < th0, below at theta > th0
+        if (side>0. and th0==0.) or (side<0. and th0==np.pi): continue
+        e = T*_PANELS/a
+        off = _rise(xc,e) if side>0. else _fall(xc,e) # offsets from th0
+        d0,d1 = off[:-1],off[1:]
+        ok = d1>d0
+        if not np.any(ok): continue
+        c,hw = (d0[ok]+d1[ok])/2.,(d1[ok]-d0[ok])/2.
+        dl = (c[:,None]+hw[:,None]*xg[None,:]).ravel()
+        wt = (hw[:,None]*wg[None,:]).ravel()
+        th = th0-side*dl
+        y = 2.*a*np.sin(th0-side*dl/2.)*np.sin(side*dl/2.)+y0
+        out += side*np.sum(wt*_fermi_x(side*y/T))
+    return float(out)
+
+
+def _thermal_moments(ne,fermi,w,a,b,T,dth_w):
+    """Exact cosine moments R_k = int_0^pi r(theta) cos(k theta) dtheta,
+    k < ne, of the thermal factor r = [f(E) - f(E+w)]/w at E = a cos(theta)
+    + b, with dth_w the moment k=0 of the T=0 box (see _box_weights).
+
+    For k >= 1, an integration by parts leaves the derivative of r,
+
+      R_k = -(1/k) int_0^pi g(theta) sin(k theta) dtheta,
+      g = dr/dtheta = a sin(theta) [p(E - fermi) - p(E - fermi + w)]/w,
+
+    a bump of width T around each edge, which decays as exp(-|E-edge|/T).
+    g sin(k theta) is analytic and even about 0 and pi, so the midpoint
+    rule on a grid of step pi/N is exact up to exp(-(2N - k) d), with d
+    the distance of the nearest pole of p (at E = edge + i pi T) from the
+    real theta axis. N = (ne + 45/d)/2 makes this exp(-45) for every
+    k < ne, and only the nodes within 44 T of an edge are summed: at most
+    a few hundred nodes per edge, whatever T, because a small T makes the
+    grid finer and the bump narrower in the same proportion. The sums
+    over the nodes for all k at once are a chirp z-transform (_exp_sums).
+    At w = 0, r = p is itself the bump, and R_k is summed directly.
+
+    For k = 0 there is no such form, and R_0 is the box moment plus the
+    excess of the Fermi function over the step at the two edges,
+    R_0 = dth_w + [G(fermi) - G(fermi-w)]/w (_fermi_excess)"""
+    R = np.zeros(ne)
+    edges = [fermi] if w==0. else [fermi,fermi-w]
+    d = min(abs(np.arccos(complex((nu-b)/a,np.pi*T/a)).imag) for nu in edges)
+    N = (ne+_ALIAS/d)/2.+1.
+    if N<2.**52: N = int(np.ceil(N))
+    h = np.pi/N # the step of the fine grid
+    Y = _SUPPORT*T/a # half width of a bump, in x
+    # the bump of each edge as offsets from its angle th0, so a bump far
+    # narrower than the rounding of th0 keeps its nodes; pth0 = pi - th0
+    bumps = []
+    for nu in edges:
+        x = (nu-b)/a
+        if x-Y>=1. or x+Y<=-1.: continue # the bump misses [-1,1]
+        xc = min(max(x,-1.),1.)
+        bumps.append(dict(nu=nu,xc=xc,th0=np.arccos(xc),pth0=np.arccos(-xc),
+            up=float(_rise(xc,max((x-xc)+Y,0.))),
+            down=float(_fall(xc,max((xc-x)+Y,0.))),
+            at0=x+Y>=1.,atpi=x-Y<=-1.)) # touching theta = 0 or pi
+    if len(bumps)==2 and max(bumps[0]["th0"]-bumps[0]["up"],
+            bumps[1]["th0"]-bumps[1]["up"]) <= min(
+            bumps[0]["th0"]+bumps[0]["down"],
+            bumps[1]["th0"]+bumps[1]["down"]): # overlapping, one grid
+        p0,p1 = bumps
+        # the angle of fermi - w from fermi, without cancellation
+        dw = float(_fall(p0["xc"],w/a) if w>0. else -_rise(p0["xc"],-w/a))
+        bumps = [dict(nu=fermi,th0=p0["th0"],
+            lo=min(-p0["up"],dw-p1["up"]),hi=max(p0["down"],dw+p1["down"]),
+            hi0=max(p0["th0"]+p0["down"],p1["th0"]+p1["down"]),
+            lopi=max(p0["pth0"]+p0["up"],p1["pth0"]+p1["up"]),
+            at0=p0["at0"] or p1["at0"],atpi=p0["atpi"] or p1["atpi"])]
+    else:
+        for p in bumps:
+            p.update(lo=-p["up"],hi=p["down"],hi0=p["th0"]+p["down"],
+                    lopi=p["pth0"]+p["up"])
+    k = np.arange(ne)
+    X = np.zeros(ne,dtype=np.complex128) # sum_m g_m exp(i k theta_m)
+    for p in bumps:
+        nu = p["nu"]
+        # the grid, y = E - nu at its nodes without cancellation, and the
+        # phase exp(i k theta) of its first node
+        if p["at0"] and p["atpi"]: # the whole circle, N midpoints
+            m = np.arange(N)
+            th = h*(m+0.5)
+            y = a*np.cos(th)+b-nu
+        elif p["at0"]: # from theta = 0, symmetric about it
+            m = np.arange(int(np.ceil(p["hi0"]/h))+1)
+            th = h*(m+0.5)
+            y = -2.*a*np.sin(th/2.)**2+(a+b-nu)
+        elif p["atpi"]: # from theta = pi, symmetric about it
+            m = np.arange(int(np.ceil(p["lopi"]/h))+1)
+            ep = h*(m+0.5)
+            th = np.pi-ep
+            y = 2.*a*np.sin(ep/2.)**2+(b-a-nu)
+        else: # around the edge, which is inside
+            th0 = p["th0"]
+            m0 = int(np.floor(p["lo"]/h))
+            m = np.arange(int(np.ceil(p["hi"]/h))-m0+1)
+            dl = h*(m+m0)
+            th = th0+dl
+            y = -2.*a*np.sin(th0+dl/2.)*np.sin(dl/2.)
+        # E - fermi and E - fermi + w, each without the rounding of the
+        # other edge
+        if nu==fermi: y,yw = y,y+w
+        else: y,yw = y-w,y
+        if w==0.: g = _thermal_ratio(y,0.,T)
+        else: g = a*np.sin(th)*_thermal_slope(y,w,T,yw=yw)
+        S = _exp_sums(g,N,ne) # sum_m g_m exp(i pi k m/N)
+        if p["atpi"] and not p["at0"]: # theta_m = pi - h (m + 1/2)
+            X += (-1.)**k*np.exp(-1j*k*h/2.)*np.conj(S)
+        else: X += np.exp(1j*k*th[0])*S
+    if w==0.: return h*X.real
+    R[1:] = -h*X[1:].imag/k[1:]
+    a,b,T = float(a),float(b),float(T) # the cache keys of _fermi_excess
+    G0 = _fermi_excess(float(fermi),a,b,T)
+    G1 = _fermi_excess(float(fermi-w),a,b,T)
+    R[0] = dth_w+(G0-G1)/w
+    return R
+
+
+@functools.lru_cache(maxsize=8)
+def _node_window(ne,the):
+    """_edge_window(theta_j, the, 6 pi/ne) on the ne nodes, evaluated only
+    within 13 tau of the edge and of its images, since it is exactly zero
+    beyond 12 tau. Cached, so the window of the Fermi level is built once
+    for all the frequencies; the array is not to be modified"""
+    th = np.pi*(np.arange(ne)+0.5)/ne
+    tau = 6.*np.pi/ne
+    m = 13.*tau
+    near = (np.abs(th-the)<m)|(th+the<m)|(2.*np.pi-th-the<m)
+    out = np.zeros(ne)
+    out[near] = _edge_window(th[near],the,tau)
+    out.setflags(write=False)
+    return out
+
+
+def _thermal_weights(ne,fermi,w,a,b,T):
+    """The weights q_j of _box_weights at T > 0: the window of T=0 at the
+    two edges, the exact cosine moments of r (_thermal_moments) inside it
+    and the midpoint rule r(E_j) pi/ne outside it. A |w| below 1e-10 is
+    taken as the limit w = 0, r = -df/dE, as the midpoint rule always did"""
+    from scipy.fft import dct
+    if abs(w)<=1e-10: w = 0.
+    lo,hi = fermi-max(w,0.),fermi-min(w,0.) # the edges in energy
+    xa = min(max((lo-b)/a,-1.),1.) # cut to [-1,1]
+    xb = min(max((hi-b)/a,-1.),1.)
+    dth_w = 0.
+    if w!=0. and xa<xb: # the width of the box in theta, as at T=0
+        cut = (lo-b)/a<-1. or (hi-b)/a>1.
+        d = xb-xa if cut else abs(w)/a
+        dth_w = 2.*np.arctan2(d,np.sqrt(1.-xb**2)+np.sqrt(1.-xa**2))/abs(w)
+    k = np.arange(ne)
+    th = np.pi*(k+0.5)/ne # the nodes in theta
+    R = _thermal_moments(ne,fermi,w,a,b,T,dth_w)
+    W = dct(R,type=3)/ne # the interpolant times r, integrated exactly
+    r = _thermal_ratio(a*np.cos(th)+b-fermi,w,T) # [f(E) - f(E+w)]/w
+    # the window at the two edges, the Fermi level and the Fermi level - w
+    t1,t2 = [float(np.arccos(min(max((nu-b)/a,-1.),1.)))
+            for nu in (fermi,fermi-w)]
+    psi = 1.-(1.-_node_window(int(ne),t1))*(1.-_node_window(int(ne),t2))
+    q = psi*W + (1.-psi)*r*(np.pi/ne)
+    # far from the edges, where r is negligible, as in the midpoint rule
+    q[(psi<1e-16)&(np.abs(r)<=1e-14*np.max(np.abs(r))+1e-300)] = 0.
+    return q
+
+
 def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
     """Absorptive (Hermitian) part of sigma_ab(w), (nw,3,3), from one set of
-    moments (see the module docstring). At T=0 the occupation box is
-    integrated exactly over the Chebyshev interpolant of the rest of the
-    integrand (_box_weights), so any w works, w=0 included. At T>0 the
-    occupation factor is sampled on the nodes, which needs T above their
-    spacing, about pi a/ne (delta/7 for the default ne)"""
+    moments (see the module docstring). The occupation factor
+    [f(E) - f(E+w)]/w is integrated exactly over the Chebyshev interpolant
+    of the rest of the integrand near the Fermi edges and by the midpoint
+    rule on the nodes away from them (_box_weights), at T=0 and at any
+    finite T. So any w works, w=0 included, and the result does not depend
+    on ne also when T is below the spacing of the nodes, about pi a/ne
+    (delta/7 for the default ne). A T of several spacings, as the default
+    T = delta, gives the midpoint rule on the nodes to rounding"""
     M = st.M
     a,b = st.a,st.b
     if ne is None: ne = 4*M
@@ -663,20 +954,17 @@ def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
         E2 = E + w
         keep = inside & (E2>st.emin-pad) & (E2<st.emax+pad) & \
                 (np.abs(E2-b)<a*(1.-1e-9))
-        if T<=0.: # the box, integrated over the interpolant of the rest
-            q = _box_weights(ne,fermi,w,a,b)
-            keep = keep & (q!=0.)
-        else:
-            r = _ratio(E,w,fermi,T)
-            keep = keep & (np.abs(r)>1e-14*np.max(np.abs(r))+1e-300)
+        # the occupation factor, integrated over the interpolant of the rest
+        q = _box_weights(ne,fermi,w,a,b,T=max(T,0.))
+        keep = keep & (q!=0.)
         if not np.any(keep): continue
         idx = np.nonzero(keep)[0]
         x2 = (E2[idx]-b)/a
         # phi_n(E+w) = (2 - delta_n0) T_n(x2)/(pi a sqrt(1-x2^2)), times the
-        # weight of pi int dE on the Chebyshev-Gauss nodes: q_j at T=0, and
-        # r_j pi/ne, the midpoint rule in theta = arccos(x), at T>0
-        if T<=0.: wts = q[idx]/np.sqrt(1.-x2**2)
-        else: wts = r[idx]*(np.pi/ne)*a*np.pi/(np.pi*a*np.sqrt(1.-x2**2))
+        # weight q_j of pi int dE on the Chebyshev-Gauss nodes, which away
+        # from the Fermi edges is r_j pi/ne, the midpoint rule in
+        # theta = arccos(x)
+        wts = q[idx]/np.sqrt(1.-x2**2)
         s = _contract(x2,idx,wts,Y).reshape((nd,nd))
         for ia,al in enumerate(st.dirs):
             for ib,be in enumerate(st.dirs): out[iw,al,be] = s[ia,ib]
@@ -927,10 +1215,10 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
     fermi : float
       Fermi level, default 0
     T : float
-      temperature, default delta. T=0 integrates the occupation box
-      exactly, so any frequency works, w=0 included (the top of the Drude
-      peak of a metal). A finite T samples the occupation factor on the
-      energy nodes, so it needs T above their spacing, about delta/7
+      temperature, default delta. The occupation factor is integrated
+      exactly near the Fermi level at every T >= 0, so any frequency works,
+      w=0 included (the top of the Drude peak of a metal), also when T is
+      below the spacing of the energy nodes, about delta/7
     scale : float
       half width of the rescaled spectrum, default from Lanczos padded by 5%
     memory : float
