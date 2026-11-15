@@ -333,14 +333,10 @@ def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     # spinful: every spin-orbital of site i couples to every one of site j
     from ..scftk.densitydensity import obj2geometryarray
     Ua = obj2geometryarray(U,h.geometry)
-    out = dict()
-    for d,m in v.items():
-        ns = m.shape[0]
-        m1 = np.zeros((2*ns,2*ns),dtype=np.complex128)
-        for i in range(ns):
-            for j in range(ns):
-                m1[2*i:2*i+2,2*j:2*j+2] = m[i,j]
-        out[d] = m1
+    # the same coupling between every spin of the two sites: the 2x2 block
+    # of the pair (i,j) is m[i,j] times a block of ones, a Kronecker product
+    out = {d: np.kron(np.asarray(m,dtype=np.complex128),np.ones((2,2)))
+            for d,m in v.items()}
     ns = len(h.geometry.r)
     for i in range(ns): # onsite Hubbard, up-down only
         out[(0,0,0)][2*i,2*i+1] += Ua[i]

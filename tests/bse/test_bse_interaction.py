@@ -156,3 +156,30 @@ def test_a_nonpositive_rcut_is_rejected():
     h = geometry.honeycomb_lattice().get_hamiltonian()
     with pytest.raises(ValueError, match="rcut"):
         density_interaction(h, Vr=_coulomb, rcut=0.)
+
+
+def test_spinful_interaction_couples_every_spin_of_two_sites():
+    """A density-density interaction does not depend on the spin, so the
+    spinful W of the pair (i,j) is the spinless one on all four
+    spin-orbital pairs, and the Hubbard U sits only on the up-down pair of
+    the same site. On a cell of several sites with three shells and a Vr
+    tail reaching several cells, every direction of the spinful W is the
+    spinless W in every 2x2 block, exactly, plus U on the up-down entries
+    of cell zero"""
+    g = geometry.honeycomb_lattice().get_supercell(2)
+    kw = dict(V1=0.7, V2=0.3, V3=0.1,
+              Vr=lambda r1, r2: 0.5/np.linalg.norm(r1-r2), rcut=2.5)
+    U = 1.3
+    ws = density_interaction(g.get_hamiltonian(has_spin=True), U=U, **kw)
+    w0 = density_interaction(g.get_hamiltonian(has_spin=False), **kw)
+    assert set(ws) == set(w0) and len(w0) > 1
+    n = len(g.r)
+    for d in w0:
+        ref = np.zeros((2*n, 2*n), dtype=np.complex128)
+        for s1 in range(2):
+            for s2 in range(2):
+                ref[s1::2, s2::2] = w0[d]
+        if d == (0, 0, 0):
+            ref[np.arange(0, 2*n, 2), np.arange(1, 2*n, 2)] += U
+            ref[np.arange(1, 2*n, 2), np.arange(0, 2*n, 2)] += U
+        assert np.array_equal(ws[d], ref), d
