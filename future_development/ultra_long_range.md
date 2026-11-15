@@ -276,7 +276,50 @@ the exact one from above as `emax` grows: 0.079 at `emax=1`, 0.047 at 2, 0.036 a
 $2\times10^{-9}$ at `maxerror=1e-11`. At the default tolerance they differ by $10^{-3}$, which
 is the distance at which each loop stops.
 
-Still not built: a shell filling for a gapless paired state.
+The shell of a gapless paired state was built after that (060010b, tests made sharper in
+982a928). A Nambu mean field at a filling whose pairing dies kept the charge error of one
+k-shell. The ultracell now hands its levels with $|E|<\mathrm{tol}$ to `superscf.ShellFilling`,
+the object of "ed", so the occupations, the change of the band energy and the shift of the
+Fermi level have one implementation. `ShellFilling.fill(dm,add=)` takes the routine that adds
+the change, and the ultracell adds it at the entries the mean field reads (`SparseBackend.
+fill_shell`, `shell_levels`, `shell_adder`), with the shell vectors on the Nambu orbitals of the
+supercell. The shell levels are eigenstates of the ultracell matrix, so they are kept states and
+the frozen density is untouched; in 22 loops (cuts 0.1 to 2.0, $T=10^{-7}$ and $10^{-3}$) the
+highest frozen level stayed below $-E_\mathrm{max}$. Measured on a chain of 6 cells (Zeeman
+0.6, potential 0.2, $U=-1$, 11.4 of 36 states, nk=3): the charge error goes from 0.133
+electrons per supercell to $10^{-15}$, and with every state kept the energy and the Fermi level
+are those of "ed" and of `densitydensity.Vinteraction` (3e-5 and 4.4e-4 off before). Runs
+whose shell is not filled are bit-identical to 555dbce (16 runs). A reviewer found the code
+right and two wrong fills the first tests let pass (the change of the band energy dropped from
+the spin-spin loop, and a conjugated fill on a field along z), which the tests now catch. Scan
+of cuts at $T=10^{-7}$, converged and charge held, before and after: potential 0.2 at 11.4
+states, 107/0 and 107/103 of 107; potential 0.5, 30/0 and 29/26 of 54; potential 0.2 at 9.4
+states, 19/0 and 25/25 of 54.
+
+The maintainer chose on 15 November 2026 to land it with these limits recorded, all open:
+- With a cut the normal Fermi level comes from the electrons in a window centered at the Fermi
+  level of their periodic part, and the BdG window is centered at the chemical potential (0.03
+  apart here). At 4 of 107 cuts (0.35, 1.175, 1.85, 1.875) one level at the shell momenta is in
+  one window only, the shell levels sit 7e-4 to 0.027 off zero, and the charge keeps its error
+  (+0.2) until $40T$ reaches them ($T=10^{-4}$ at 1.175, $10^{-3}$ at 0.35). Centering the
+  electron window at the previous chemical potential is an idea, not tried.
+- The recount of the kept states meets the fill: at potential 0.5, emax=1.55, the loop goes
+  round between 42 kept states (shell filled) and 38 (the shell cannot hold the charge) and no
+  longer converges; it ended with the charge error before.
+- The gate cycle of "ed" comes with the shell: 4 cells, nk=4, potential 0.2, $U=-1$, filling
+  0.3, $T=10^{-2}$ converged before with a charge error of 0.1 and now does not, the pairing
+  going between 0.009 and 0.014 around $T$ with 81 fills in 300 iterations; "ed" does the same
+  at 555dbce.
+- The shell vectors of every kpoint are held on the supercell orbitals at once, outside the
+  chunks of `state_chunks`, and at $T>0$ the shell is $|E|<40T$: on the test chain at
+  $T=2\times10^{-2}$ it held 35 to 42 percent of the kept states. Not measured at scale.
+- With a cut and a nonzero change of the band energy ($T=2\times10^{-2}$, emax=1.5, correction
+  5e-4), $(dE-\mu\,dN)/dN$ is $-8.14\times10^{-3}$ against $-7.7\times10^{-3}$ for "ed" and
+  the uncut ultracell. What the value with a cut should be is not settled.
+- Not from the shell: many Nambu loops with a cut do not converge at 555dbce either (24 of 54
+  at potential 0.5, 35 of 54 at 9.4 states), with a pairing near 0.04 that does not settle and
+  a shell that is never armed. The KPM Nambu engine has no Fermi level of the paired state, so
+  no shell there. No test covers the first three limits.
 
 The paper has no frozen density and no window: Eq. (2) sums every band at the central k, and
 the runs keep the occupied states plus a number of empty ones, which is our `emax=`. In its
@@ -322,7 +365,7 @@ is an extension of ours.
   frozen states do not respond (about a quarter of the pair response at $E_\mathrm{max}=W/3$,
   $\Delta=W/100$), so a pair density wave with zero average needs a measured table in `emax`;
   the Nambu recount can change the kept dimension by a multiplet between iterations. Not built:
-  a shell filling, Nambu `get_vev`, asymmetric Nambu windows, a response of the frozen states.
+  Nambu `get_vev`, asymmetric Nambu windows, a response of the frozen states.
 
 ## The method, and what it becomes in a tight-binding basis
 

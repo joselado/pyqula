@@ -372,6 +372,21 @@ Nambu degree of freedom. There the cut `emax` keeps the Bogoliubov-de Gennes
 potential, and the deep states are frozen with their pairing. So a uniform
 pairing is exact for any `emax`, also below the gap. The modulated part of
 the pairing converges slowly with `emax`, because the frozen states do not
-respond to the modulation, so we check it by raising `emax`. A cut on a
+respond to the modulation, so we check it by raising `emax`. On a chain with
+$U=-2t$ under a slow potential, `emax=2` gave a modulation of 0.047 against
+0.032 with every state, and `emax=3` gave 0.036. A cut on a
 Nambu Hamiltonian needs `rebuild_basis=True`, since the chemical potential
 moves during the loop.
+
+The pairing can also die in the loop, for example under a Zeeman field. The
+state is then a metal, written as a BdG Hamiltonian. On a finite mesh the
+levels of a metal are discrete, and some of them are degenerate at the Fermi
+energy. The filling may ask to fill these levels only in part, and then no
+Fermi energy gives the requested charge. In that case the loop fills these
+levels in part, so the state holds the filling, as it does for a supercell.
+With every state kept, the charge, the energy and the Fermi energy are those
+of the supercell. With a cut, these levels can sit slightly away from the
+Fermi energy. The charge then keeps a small error and the loop prints a
+message; a larger `T` removes it, and on a chain of six cells `T=1e-3` was
+enough. When the pairing is of the order of `T`, the loop can go round
+between the paired state and the metal and not converge.
