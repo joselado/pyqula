@@ -551,3 +551,22 @@ def test_expectation_values_need_the_states_below_zero(rebuild):
     v1 = h.get_ultracell(hs,emax=1.5,rebuild_basis=rebuild).get_vev(nk=2)
     v2 = hs.get_vev(nk=2)
     assert np.max(np.abs(v1-v2))<1e-8
+
+
+def test_default_broadening_follows_the_folded_mesh():
+    """The default delta of u.get_dos() is the one h.get_dos() takes on a
+    mesh of the unit cell with as many momenta as the folded mesh. The
+    sqrt3 x sqrt3 cell of graphene has N=3, so nk=10 folds 300 momenta,
+    about 17 per direction and delta=5/sqrt(300)=0.29; its diagonal form
+    (1,3) would give 5/10. A 3x3 cell at nk=4 folds a 12x12 mesh"""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    es = np.linspace(-3.,3.,13)
+    hs = g.get_supercell([[2,1,0],[-1,1,0],[0,0,1]],
+            store_primal=True).get_hamiltonian(has_spin=False)
+    for hs,nk,delta in [(hs,10,5./np.sqrt(300.)),
+            (h.get_supercell([3,3]),4,5./12.)]:
+        u = h.get_ultracell(hs)
+        d1 = u.get_dos(energies=es,nk=nk,write=False)[1]
+        d2 = u.get_dos(energies=es,nk=nk,delta=delta,write=False)[1]
+        assert np.max(np.abs(d1-d2))<1e-12*np.max(d2)

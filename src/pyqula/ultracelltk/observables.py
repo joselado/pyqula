@@ -65,16 +65,22 @@ def ultracell_kmesh(u,nk):
 
 def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
     """Density of states per unit cell, on an nk mesh of the ultracell's
-    Brillouin zone. delta defaults to the width h.get_dos() would use on the
-    mesh of the unit cell that the folded momenta form. Energies above emax
-    carry no weight, since those states are not in the basis"""
+    Brillouin zone. delta defaults to the width h.get_dos() would use on a
+    mesh of the unit cell with as many momenta as the folded mesh, N times
+    the kpoints of the ultracell, the same number in every direction. For
+    the sqrt3 x sqrt3 cell of graphene and nk=10 this is 300 momenta, about
+    17 per direction. Energies above emax carry no weight, since those
+    states are not in the basis"""
     from ..dos import write_dos
     write = filewrite.resolve(write,True) # the call, else the global switch
     ks = ultracell_kmesh(u,nk)
     if delta is None:
         d = u.basis.dimensionality
         nks = np.zeros(d) + np.atleast_1d(check_nk(nk))[0:d] # per direction
-        delta = 5./min(nks*u.basis.n[0:d]) # as dos_kmesh, on the folded mesh
+        # the folded momenta per direction of the unit-cell zone; for a
+        # supercell matrix that is not diagonal they are not a rectangular
+        # mesh of the unit cell, so only their number measures them
+        delta = 5./(u.basis.N*np.prod(nks))**(1./d) # as dos_kmesh
     check_delta(delta)
     es = np.concatenate([eigenvalues(u.basis,u.hk(k),k) for k in ks])
     ys = calculate_dos(es,energies,delta)/(np.pi*len(ks)*u.basis.N)
