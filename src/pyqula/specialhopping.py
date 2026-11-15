@@ -399,14 +399,29 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
     non-reciprocal coupling raises instead of being changed in silence.
     A list of shell couplings or None goes through g.get_hamiltonian(tij=Jij)
     as before, with the range of its shells; rcut is for a function or a
-    generator only"""
+    generator only.
+
+    The pair of a site with itself, Jij(r_i,r_i), is dropped for a
+    function and for a generator before the check (onsite=False of
+    distance_cut_interaction). A coupling is between pairs of sites, and
+    the onsite terms of the models are the chemical potential and the
+    field: Jij(r_i,r_i) would act as a shift of mu_i in the gas and as a
+    single-ion anisotropy in the spin model. So a tail that diverges at
+    zero distance, such as 1/r, is taken as it is, with no numpy warning
+    for the value at zero distance that is dropped. The pair of a site
+    with its own periodic images, Jij(r_i, r_i+R) with R a lattice vector,
+    is a coupling between two sites of the crystal and stays"""
     from scipy.sparse import coo_matrix
     if isinstance(Jij,HoppingGenerator): # a matrix of couplings per cell
-        ms = generator_within(g,Jij.f,rcut=rcut)
+        with np.errstate(divide="ignore",invalid="ignore"): # at r_i=r_i
+            ms = generator_within(g,Jij.f,rcut=rcut)
+        np.fill_diagonal(ms[(0,0,0)],0.) # the site with itself
         require_pair_interaction(ms,name=name) # as a function is checked
         return coo_matrix(sum(ms.values()))
     if callable(Jij):
-        ms = distance_cut_interaction(g,Jij,rcut=rcut,name=name)
+        with np.errstate(divide="ignore",invalid="ignore"): # at r_i=r_i
+            ms = distance_cut_interaction(g,Jij,rcut=rcut,name=name,
+                    onsite=False)
         return coo_matrix(sum(ms.values()))
     if rcut is not None:
         raise ValueError("rcut is the range of a coupling given as a "

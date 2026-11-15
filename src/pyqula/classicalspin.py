@@ -29,7 +29,8 @@ class SpinModel(): # class for a spin Hamiltonian
     """Add the exchange Jij S_i.S_j, with Jij a list of couplings to the
     first, second, ... neighbors, or a function Jij(r1,r2) taken on every
     pair up to the distance rcut (None: every pair of a finite system, 5.0
-    for a periodic one), and Jm the diagonal of the exchange tensor"""
+    for a periodic one), a site with its own periodic images included but
+    not a site with itself, and Jm the diagonal of the exchange tensor"""
     from .specialhopping import folded_interaction
     m = folded_interaction(self.geometry,Jij,rcut=rcut) # k=0 couplings
 #    (pairs,js) = add_heisenberg(self.geometry.r)

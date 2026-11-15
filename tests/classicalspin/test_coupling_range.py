@@ -168,3 +168,42 @@ def test_a_hopping_generator_is_checked_as_a_function(model):
         build(model,g,Jij=HoppingGenerator(forward))
     _,e = build(model,g,Jij=NNG(g,[1.])) # a real reciprocal one is taken
     assert abs(e([1.,1.]))>0.1
+
+
+def exp_with_onsite(r1,r2):
+    """A coupling exp(-d), 1 at zero distance"""
+    return np.exp(-np.linalg.norm(np.array(r1)-np.array(r2)))
+
+
+def coulomb(r1,r2):
+    """1/d, infinite at zero distance (numpy gives inf there)"""
+    return 1./np.linalg.norm(np.array(r1)-np.array(r2))
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_the_pair_of_a_site_with_itself_is_dropped(model):
+    """A coupling given as a function or as a generator is taken between
+    pairs of sites, never for a site with itself. The value J(r_i,r_i)
+    was kept: exp(-d) put J(0)=1 on every diagonal, a shift of mu in the
+    gas, and a 1/r tail raised. The pair of a site with its own images
+    stays: on the chain of one site with rcut=1.5 the only pairs are the
+    two images at distance 1, so the energy of the uniform state is
+    2*exp(-1) in absolute value, without the 1 of J(0)"""
+    from pyqula.specialhopping import HoppingGenerator
+    def exp_matrix(rs1,rs2):
+        dr = np.array(rs1)[:,None,:]-np.array(rs2)[None,:,:]
+        return np.exp(-np.linalg.norm(dr,axis=2))
+    g = geometry.chain()
+    for Jij in (exp_with_onsite,HoppingGenerator(exp_matrix)):
+        _,e = build(model,g,Jij=Jij,rcut=1.5)
+        assert abs(abs(e([1.]))-2.*np.exp(-1.))<1e-12
+    # 1/r gives what the same tail with a zero at zero distance gives
+    g = geometry.chain().get_supercell(2)
+    x = [1.,1.]
+    _,e1 = build(model,g,Jij=coulomb,rcut=3.)
+    def soft(r1,r2): # 1/d between two sites, written zero at zero distance
+        d = np.linalg.norm(np.array(r1)-np.array(r2))
+        return 1./d if d>1e-6 else 0.
+    _,e2 = build(model,g,Jij=soft,rcut=3.)
+    assert abs(e1(x)-e2(x))<1e-12
+    assert abs(e1(x))>0.1
