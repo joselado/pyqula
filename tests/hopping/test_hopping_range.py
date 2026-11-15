@@ -240,14 +240,14 @@ def test_a_finite_system_keeps_every_pair():
         ("triangular_lattice",6)])
 def test_the_default_hopping_of_a_sheared_cell_has_every_neighbor(name,z):
     """The default first-neighbor hopping keeps the single-cell storage on
-    a reduced cell, and on the sheared cell a2' = a2 + 2 a1 of the same
+    a reduced cell, and on the sheared cell a2' = a2 + 6 a1 of the same
     lattice, where a first neighbor sits outside the 9 cells, it is built
     as multicell with every neighbor: z per site, and the spectrum at
     Gamma of the reduced cell"""
     g = getattr(geometry,name)()
     h0 = g.get_hamiltonian(has_spin=False)
     assert not h0.is_multicell
-    gs = g.get_supercell([[1,0,0],[2,1,0],[0,0,1]]) # the same lattice
+    gs = g.get_supercell([[1,0,0],[6,1,0],[0,0,1]]) # the same lattice
     hs = gs.get_hamiltonian(has_spin=False)
     assert hs.is_multicell
     assert np.all(_bonds(hs)==z)

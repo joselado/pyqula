@@ -81,7 +81,7 @@ def get_hamiltonian(self,tij=None,has_spin=True,
         is_multicell = True
     # the default first-neighbor hopping keeps the single-cell storage,
     # which most code reads, unless a first neighbor lies outside its 9
-    # cells, as on a strongly sheared cell (a2' = a2 + 2 a1)
+    # cells, as on a strongly sheared cell (a2' = a2 + 6 a1)
     if self.dimensionality in [1,2] and tij is None and mgenerator is None \
             and not is_multicell and neighbor_outside_cells(self):
         is_multicell = True
