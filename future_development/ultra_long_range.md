@@ -184,7 +184,31 @@ Two things are worth knowing about this route. The spinless loop goes through
 `Vinteraction_kpm` and `densitydensity_kpm`, which are named after the KPM and now carry the
 ultracell as well, a naming wart rather than a design choice. And a random guess is drawn
 on the pairs the interaction couples only, so the spinless test against "ed" passes one
-explicit guess to both. Nambu and the constraint are decisions 6 and 7 below. The new wall is the time of the dense `eigh` of
+explicit guess to both. Nambu and the constraint are decisions 6 and 7 below.
+
+The size it reaches, measured the same night on spinful graphene under $0.3\cos(2\pi
+x_1/n)$, $U=3t$, $J_1=0.2t$, one call of the loop (one iteration and the energy) at
+`nk=1`, on two threads:
+
+| cells | orbitals | `emax` | kept states | dense loop before | sparse engine |
+|---|---|---|---|---|---|
+| 24x24 | 2304 | 1.0 | 1496 | 30 s, 3.4 GB | 7 s, 0.63 GB |
+| 36x36 | 5184 | 0.5 | 2716 | | 24 s, 1.3 GB |
+| 48x48 | 9216 | 0.3 | 4684 | | 94 s, 1.9 GB |
+
+Two more changes went into the last two rows: the ultracell matrix is built on the kept
+states, and not padded to the largest block, and the states go to the supercell orbitals a
+chunk at a time. What is left is the dense `eigh` of the ultracell matrix, 19 of the 24 s
+at 2716 states, at the BLAS limit of two threads (the evr, evd and numpy drivers take
+16.6, 16.4 and 15.4 s on a random matrix of that size, and half of the eigenvectors 14.8
+s). Graphene keeps about half of its states at any useful cut, since every occupied state
+has to be there, so these rows are the worst case of the method; a unit cell with many
+orbitals and a few bands near the Fermi level is where the cut pays. The eigenvectors of
+every kpoint are kept for the density matrix, (kept states)$^2$ per kpoint, which is fine
+on the meshes an ultracell needs, a few points for a large one. Going further needs another
+route to the occupied states than the dense `eigh`, which is the question of stage 3; ARPACK
+near the Fermi level helps the local density of states there, not the density matrix, which
+needs every occupied state. The new wall is the time of the dense `eigh` of
 the ultracell matrix, about 5000 kept states, and its eigenvectors, which are quadratic in
 the kept states.
 
