@@ -135,3 +135,14 @@ def test_a_hopping_generator_gives_the_shells_of_a_list(model):
     _,e2 = build(model,g,Jij=[0.,0.7])
     assert abs(e1(x)-e2(x))<1e-10
     assert abs(e1(x))>0.1
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_a_coupling_with_no_pair_in_range_adds_nothing(model):
+    """With rcut=0.5 on the chain of spacing 1 no pair is in range, so the
+    coupling adds nothing and the energy is zero. The spin model used to
+    crash there, when it stacked an empty list of exchange tensors next to
+    the array of 3x3 tensors"""
+    g = geometry.chain().get_supercell(2)
+    _,e = build(model,g,Jij=tail,rcut=0.5)
+    assert abs(e([1.,-1.]))<1e-12

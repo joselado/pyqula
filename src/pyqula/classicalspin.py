@@ -39,7 +39,8 @@ class SpinModel(): # class for a spin Hamiltonian
     jmat[0,0] = Jm[0]
     jmat[1,1] = Jm[1]
     jmat[2,2] = Jm[2]
-    jout = [j.real*jmat for j in m.data] # store
+    # one 3x3 tensor per pair, also when no pair is in range
+    jout = np.array([j.real*jmat for j in m.data]).reshape((-1,3,3))
     self.j = np.concatenate([self.j,jout])
   def add_field(self,v):
     """Add magnetic field"""
