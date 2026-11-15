@@ -249,7 +249,7 @@ def fermi_level(esk,n,filling,T=0.):
     kept = sum(len(e) for e in esk)
     total = n*len(esk)
     ntarget = int(round(total*filling))
-    if ntarget>=kept:
+    if ntarget>=kept and kept<total: # a cut, and states above it needed
         raise ValueError("filling="+str(filling)+" needs "+str(ntarget)
                 +" occupied states, and the ultracell keeps "+str(kept)
                 +" on this mesh; build it with a larger emax")

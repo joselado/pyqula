@@ -256,23 +256,33 @@ def test_sparse_backend_reads_the_density_matrix(emax):
             U=np.ones(len(hs.geometry.r)))
     needed = sparsemeanfield.needed_entries([v],n,blocks=True)
     assert any(d!=(0,0,0) for d in needed) # bonds between supercells
-    b = SparseBackend(nk=2,T=1e-7)
+    b = SparseBackend(nk=3,T=1e-7)
     dm,fermi = b.dm_with_fermi(hs,needed,0.5)
     h2 = hs.copy() ; h2.shift_fermi(-fermi)
-    full = dm_full(MeshStates(h2,nk=2),list(needed),smearing(1e-7))
+    full = dm_full(MeshStates(h2,nk=3),list(needed),smearing(1e-7))
     for d,(r,c) in needed.items():
         assert np.max(np.abs(dm[d].toarray()[r,c]-full[d][r,c]))<1e-12
     if emax is None: # the supercell itself
         h3 = hs.copy() ; h3.turn_dense()
-        fermi3 = h3.get_fermi4filling(0.5,nk=2,T=1e-7)
+        fermi3 = h3.get_fermi4filling(0.5,nk=3,T=1e-7)
         assert abs(fermi-fermi3)<1e-9
         h3.shift_fermi(-fermi3)
-        eds = h3.get_density_matrix(ds=list(needed),nk=2,T=1e-7)
+        eds = h3.get_density_matrix(ds=list(needed),nk=3,T=1e-7)
         for d,(r,c) in needed.items():
             ed = dense(eds[d])
             assert np.max(np.abs(dm[d].toarray()[r,c]-ed[r,c]))<1e-8
     # the band energy of the shifted Hamiltonian, from the kept states
     hs.shift_fermi(-fermi) # the backend kept the states of hs
     e1 = b.band_energy(hs)
-    e2 = SparseBackend(nk=2).band_energy(h2) # recomputed
+    e2 = SparseBackend(nk=3).band_energy(h2) # recomputed
     assert abs(e1-e2)<1e-10
+
+
+def test_full_filling_without_a_cut():
+    """With every state kept a filling of one occupies all of them, as for
+    "ed"; with a cut it needs the states above emax and raises"""
+    from pyqula.ultracelltk.meanfield import fermi_level
+    es = [np.array([-1.,0.,1.]),np.array([-0.5,0.5,2.])]
+    assert fermi_level(es,3,1.0)>=2.
+    with pytest.raises(ValueError): # 6 states needed, 5 kept
+        fermi_level([es[0],es[1][0:2]],3,1.0)
