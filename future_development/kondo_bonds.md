@@ -175,13 +175,33 @@ the run without it. The Goldstone check of the spin RPA is not a test of
 the range: it held with J3 dropped too, since the dropped state is
 consistent.
 
-Not reached: qtci, a Neel state and a supercell at nonzero Q. Left as
-they are, since they are neither a mean field nor an RPA: the classical
+Not reached: qtci, a Neel state and a supercell at nonzero Q. Left at
+first, since they are neither a mean field nor an RPA: the classical
 spin, lattice-gas and Ising models (`add_heisenberg`, `add_interaction`)
-take a callable coupling through `get_hamiltonian(tij=Jij)`, whose
+took a callable coupling through `get_hamiltonian(tij=Jij)`, whose
 single-cell storage in 1D and 2D keeps only the neighboring cells, so a
-coupling two cells away on a small cell is dropped there too; a list of
+coupling two cells away on a small cell was dropped there too; a list of
 couplings goes through the multicell builder with a range set by the
-number of shells and is complete. Hoppings built with `mgenerator` and the
-default `nc=2` (for instance in `specialhamiltonian.py`) have the range of
-the old shells and were not checked.
+number of shells and is complete.
+
+Repaired on 15 November 2026, on a design chosen by a Fable agent: a
+callable `Jij(r1,r2)` goes through `specialhopping.distance_cut_interaction`,
+as the Vr of the mean field, with a new `rcut=None` (every pair of a finite
+system, 5.0 for a periodic one) on the three methods, through one helper,
+`specialhopping.folded_interaction`, which returns the couplings folded at
+k=0. The old builder also made the pairs of a large cell depend on where a
+site sits in it (the 3x3 block of cells is not centered on the site), so
+the change of range is not a loss: the pairs beyond 5.0 that it kept on a
+large cell were not a physical set. Nothing in the package passed a plain
+callable. The route is stricter, since a coupling that is not reciprocal,
+real and finite raises. `tests/classicalspin/test_coupling_range.py` (10
+tests) holds, on the three models, a function against the same shells as a
+list on the one-site chain, the energy per site of an alternating state in a
+cell of two and of six sites, a uniform local energy on a 6x6 or 4x4 cell,
+and every pair of a finite chain; all 10 fail on the code before. Still
+open: a `HoppingGenerator` (`specialhopping.NNG`), which in 1D and 2D also
+lands in the single-cell storage, since `distance_cut_interaction` takes a
+pair function and not a matrix generator; and the hoppings built with
+`mgenerator` and the default `nc=2` (for instance in
+`specialhamiltonian.py`), which have the range of the old shells and were
+not checked.

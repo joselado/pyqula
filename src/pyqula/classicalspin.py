@@ -25,9 +25,13 @@ class SpinModel(): # class for a spin Hamiltonian
     self.b = np.zeros((len(g.r),3)) # magnetic field
     self.j = np.array([zero]) # empty list
     self.pairs = np.array([[0,0]]) # empty list
-  def add_heisenberg(self,Jij=None,Jm=[1.,1.,1.],**kwargs):
-    h = self.geometry.get_hamiltonian(has_spin=False,tij=Jij)
-    m = coo_matrix(h.get_hk_gen()([0.,0.,0.])) # get onsite matrix
+  def add_heisenberg(self,Jij=None,Jm=[1.,1.,1.],rcut=None):
+    """Add the exchange Jij S_i.S_j, with Jij a list of couplings to the
+    first, second, ... neighbors, or a function Jij(r1,r2) taken on every
+    pair up to the distance rcut (None: every pair of a finite system, 5.0
+    for a periodic one), and Jm the diagonal of the exchange tensor"""
+    from .specialhopping import folded_interaction
+    m = folded_interaction(self.geometry,Jij,rcut=rcut) # k=0 couplings
 #    (pairs,js) = add_heisenberg(self.geometry.r)
     pairs = np.array([m.row,m.col]).transpose() # convert to array
     self.pairs = np.concatenate([self.pairs,pairs])

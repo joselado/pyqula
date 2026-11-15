@@ -43,9 +43,13 @@ class LatticeIsing():
         magnetization approximately equal to m (in [-1,1])"""
         N_up = int(np.round(self.nsites*(1.+m)/2.))
         self.s = random_spins(self.nsites,N_up)
-    def add_interaction(self,Jij=None,**kwargs):
-        h = self.geometry.get_hamiltonian(has_spin=False,tij=Jij)
-        m = coo_matrix(h.get_hk_gen()([0.,0.,0.])) # get onsite matrix
+    def add_interaction(self,Jij=None,rcut=None):
+        """Add the coupling Jij between pairs of sites, a list of couplings
+        to the first, second, ... neighbors, or a function Jij(r1,r2) taken
+        on every pair up to the distance rcut (None: every pair of a finite
+        system, 5.0 for a periodic one)"""
+        from .specialhopping import folded_interaction
+        m = folded_interaction(self.geometry,Jij,rcut=rcut) # k=0 couplings
         pairs = np.array([m.row,m.col]).transpose() # convert to array
         self.pairs = np.concatenate([self.pairs,pairs]) # add interaction
         self.j = np.concatenate([self.j,m.data]).real # store

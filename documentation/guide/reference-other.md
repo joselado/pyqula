@@ -98,9 +98,13 @@ Optional arguments:
 
 - Jij=None: list of couplings of each shell, for example `[J1,J2,J3]` for
   first, second and third neighbors. It accepts everything that `tij` of
-  `g.get_hamiltonian()` accepts; `None` is first neighbors with $J=1$
+  `g.get_hamiltonian()` accepts, or a function `Jij(r1,r2)` of two
+  positions; `None` is first neighbors with $J=1$
 - Jm=[1.,1.,1.]: diagonal weights $(J_x,J_y,J_z)$ multiplying `Jij`; use
   different values for XXZ or Ising anisotropy
+- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
+  distance is coupled, the periodic images included, and none beyond it;
+  `None` is every pair of a finite system and 5.0 for a periodic one
 
 Modifies `sm` in place, no return value
 
@@ -221,7 +225,11 @@ Optional arguments:
 
 - Jij: list of couplings of each shell, for example `[J1,J2,J3]`. A positive
   value is repulsive and a negative one attractive. It accepts everything
-  that `tij` of `g.get_hamiltonian()` accepts
+  that `tij` of `g.get_hamiltonian()` accepts, or a function `Jij(r1,r2)`
+  of two positions
+- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
+  distance is coupled, the periodic images included, and none beyond it;
+  `None` is every pair of a finite system and 5.0 for a periodic one
 
 Modifies `lg` in place, no return value
 
@@ -397,7 +405,11 @@ Optional arguments:
 - Jij: list of couplings of each shell, for example `[J1,J2,J3]`. A
   positive value is ferromagnetic (note the opposite sign to
   `LatticeGas.add_interaction()`). It accepts everything that `tij` of
-  `g.get_hamiltonian()` accepts
+  `g.get_hamiltonian()` accepts, or a function `Jij(r1,r2)` of two
+  positions
+- rcut=None: for a function `Jij(r1,r2)`, every pair of sites up to this
+  distance is coupled, the periodic images included, and none beyond it;
+  `None` is every pair of a finite system and 5.0 for a periodic one
 
 Modifies `li` in place, no return value
 

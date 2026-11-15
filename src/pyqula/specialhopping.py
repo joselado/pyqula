@@ -377,6 +377,32 @@ def distance_cut_interaction(g,Vr,rcut=None,name="Vr",onsite=True):
     return checked(out)
 
 
+def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
+    """The couplings of a classical model (spins, Ising, lattice gas)
+    between the pairs of sites of the cell g, with the periodic images
+    folded onto the cell, as the k=0 matrix in coo form.
+
+    A function Jij(r1,r2) is taken on every pair within rcut, each distance
+    shell whole, as the Vr of the mean field (distance_cut_interaction:
+    rcut=None is every pair of a finite system and 5.0 for a periodic one).
+    It used to go through the single-cell storage of g.get_hamiltonian,
+    which in 1D and 2D keeps only the neighboring cells, so a coupling two
+    cells away on a small cell was dropped, and on a large cell the pairs
+    kept depended on where the site sits in the cell. A list of shell
+    couplings, a HoppingGenerator or None goes through
+    g.get_hamiltonian(tij=Jij) as before; rcut is for a function only"""
+    from scipy.sparse import coo_matrix
+    if callable(Jij) and not isinstance(Jij,HoppingGenerator):
+        ms = distance_cut_interaction(g,Jij,rcut=rcut,name=name)
+        return coo_matrix(sum(ms.values()))
+    if rcut is not None:
+        raise ValueError("rcut is the range of a coupling given as a "
+                "function Jij(r1,r2), and "+name+"="+repr(Jij)+" is not "
+                "one; a list of shell couplings has the range of its shells")
+    h = g.get_hamiltonian(has_spin=False,tij=Jij)
+    return coo_matrix(h.get_hk_gen()([0.,0.,0.])) # the k=0 matrix
+
+
 def add_distance_cut_interaction(v,g,Vr,rcut=None,name="Vr",onsite=True):
     """Add the Vr interaction of distance_cut_interaction to the spinless
     {direction: matrix} dictionary v, in place, and return v"""

@@ -83,6 +83,7 @@ it is the same in every run.
 
 - `add_heisenberg(Jij=[J1,J2,...])`: isotropic exchange to first, second, third neighbors, as in `g.get_hamiltonian(tij=...)`.
 - `add_heisenberg(..., Jm=[Jx,Jy,Jz])`: anisotropic diagonal exchange, for example an XXZ model.
+- `add_heisenberg(Jij=f,rcut=4.)`: an exchange `f(r1,r2)` between two positions, on every pair up to the distance `rcut`, the periodic images included; `rcut=None` is 5.0 in a crystal and every pair in a finite system.
 - `add_field(v)`: the same field $\vec b$ on every site.
 - `classicalspin.generating_functions(name=...)`: ready-made couplings between two positions, `"Linear"` (dipolar, $1/r^3$), `"RKKYTI"` (RKKY on the surface of a topological insulator), `"ZZ"` and `"XYZ"` (Ising and anisotropic diagonal), `"DM"` (Dzyaloshinskii-Moriya).
 - `add_tensor(fun)`: add the coupling `fun` between the sites of the unit cell.

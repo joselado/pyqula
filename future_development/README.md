@@ -674,9 +674,10 @@ already reached once.
   which dropped the third shell of a small cell (the one-site chain, thin
   or skewed cells) in every mean field, RPA, BSE and spinon route, while
   Vr/Jr were right; one shared builder with a range per lattice direction
-  repairs all six. Open: the composite fermion of a bond, the notebook,
-  and the classical spin, Ising and lattice-gas couplings given as a
-  function, which still stop one cell away.
+  repairs all six. The classical spin, Ising and lattice-gas couplings
+  given as a function take every pair within `rcut=` since 15 November
+  2026. Open: the composite fermion of a bond, the notebook, and the same
+  for a `HoppingGenerator`.
 
 - [`inplane_valley.md`](inplane_valley.md) -- the check of `valley_x`,
   `valley_y` and `add_valley_exchange`, and their replacement by a closed
