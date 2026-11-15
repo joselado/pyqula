@@ -568,6 +568,11 @@ class BdGFermiLevel:
     The step itself is unchanged: there N - N0 is zero, so the offset
     stays where it is.
 
+    compressibility, if given, is a function kappa(h) that replaces the
+    finite difference of compressibility() for kappa; the ultracell gives
+    it from all the levels of the lattice-periodic part of the electrons
+    (ultracelltk.meanfield.SparseBackend.normal_compressibility).
+
     Use: shift(h,x) on each Hamiltonian before its density matrix (it sets
     h.fermi), then step(x,dm) for the offset of the next iteration, which
     also leaves the charge error N-N0 in error and the size of the step in
@@ -587,9 +592,13 @@ class BdGFermiLevel:
     gain_min = 1./64. # the smallest gain
     flip_floor = 1e-6 # smaller errors are noise, and their signs not counted
 
-    def __init__(self,h,filling,search):
+    def __init__(self,h,filling,search,compressibility=None):
         self.filling = filling
         self.search = search # search(h,filling): Fermi level of the normal state
+        # kappa(h), dN/dmu of the normal state of h, when the integration
+        # gives it itself (the ultracell, whose windowed search may not
+        # reach filling +- df); otherwise compressibility() below
+        self.kappa_of = compressibility
         self.charge0 = filling*(h.intra.shape[0]//2) # electron states per cell
         self.kappa = None # set on the first Hamiltonian
         self.bound = 0. # the window of the last Hamiltonian
@@ -618,7 +627,8 @@ class BdGFermiLevel:
         the window of the pairing amplitude of h"""
         mu = self.search(h,self.filling)
         if self.kappa is None:
-            self.kappa = self.compressibility(h)
+            if self.kappa_of is None: self.kappa = self.compressibility(h)
+            else: self.kappa = self.kappa_of(h)
             self.shell.kappa = self.kappa
         d = pairing_amplitude(h)
         dmin = self.small*(h.intra.shape[0]//2)/self.kappa # small, in units of W

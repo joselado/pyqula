@@ -1198,7 +1198,8 @@ def _ultracell_sparse_loop(h,integration=None,**kwargs):
     supercell is built. nk and T default to those of this module's loop"""
     from .densitydensity_kpm import Vinteraction_kpm
     from ..ultracelltk.meanfield import SparseBackend, get_basis
-    get_basis(h) # the supercell of an ultracell, Hermitian, without Nambu
+    get_basis(h) # the supercell of an ultracell, Hermitian; a spinless
+    # Hamiltonian has no Nambu, which goes through scftk.spinspin
     h = h.get_multicell()
     h.turn_sparse()
     kwargs.setdefault("nk",8) # the defaults of generic_densitydensity

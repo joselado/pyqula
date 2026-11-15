@@ -491,7 +491,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     through the sparse engine below, with the density matrix at the
     entries the mean field reads, the Fermi level and the band energy from
     one diagonalization of the ultracell per kpoint and iteration
-    (ultracelltk.meanfield.SparseBackend). Not for a Nambu or a
+    (ultracelltk.meanfield.SparseBackend). A Nambu h0 is shifted by its
+    chemical potential first and solved in the BdG states of the ultracell,
+    with the Fermi level of superscf.BdGFermiLevel at a filling. Not for a
     non-Hermitian h0, nor with a per-site filling.
 
     integration="ed" computes the per-iteration density matrix by exact
@@ -1037,7 +1039,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     use_ultracell = integration == "ultracell"
     if use_ultracell:
         from ..ultracelltk.meanfield import get_basis
-        get_basis(h1) # an ultracell supercell, Hermitian, without Nambu
+        get_basis(h1) # an ultracell supercell, Hermitian, Nambu or not
         if not h1.is_sparse:
             raise ValueError("integration=\"ultracell\" runs on the sparse "
                     "engine and needs a sparse supercell; VJinteraction "
@@ -1203,6 +1205,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             key = np.unique(np.concatenate([r0*n_dm + c0,
                     np.arange(n_dm)*(n_dm + 1)]))
             sparse_needed[(0, 0, 0)] = (key//n_dm, key % n_dm)
+        if use_ultracell and has_eh: # the charge of the paired state,
+            # superscf.get_charge_bdg, reads every electron diagonal
+            r0, c0 = sparse_needed.get((0, 0, 0), (np.zeros(0, int),)*2)
+            e = np.arange(n_dm)[np.arange(n_dm) % 4 < 2] # 4i and 4i+1
+            key = np.unique(np.concatenate([r0*n_dm + c0, e*(n_dm + 1)]))
+            sparse_needed[(0, 0, 0)] = (key//n_dm, key % n_dm)
 
         def _pad_dm(dm):
             """An empty matrix in every direction the mean field asks for
@@ -1284,8 +1292,15 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     fermi_offset = [0.] # its unknown, a closure cell like lam_state
     if has_eh and mu is None and not use_kpm:
         from .superscf import BdGFermiLevel
-        bdg_fermi = BdGFermiLevel(h1, filling,
-                lambda hh, f: hh.get_fermi4filling(f, nk=hh.nk, T=T))
+        if use_ultracell: # the electrons in their own folded basis, and
+            # kappa from the levels of their lattice-periodic part, see
+            # ultracelltk.meanfield.SparseBackend.normal_fermi
+            bdg_fermi = BdGFermiLevel(h1, filling, ultracell.normal_fermi,
+                    compressibility=lambda hh:
+                    ultracell.normal_compressibility(hh, filling))
+        else:
+            bdg_fermi = BdGFermiLevel(h1, filling,
+                    lambda hh, f: hh.get_fermi4filling(f, nk=hh.nk, T=T))
 
     def callback_h(hh):
         if mu is None:
@@ -1431,7 +1446,17 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # one diagonalization of the ultracell per kpoint gives both the
             # Fermi level and the density matrix, as
             # full_dm_accumulate_sparse_with_fermi does for "ed" below
-            if mu is None:
+            if has_eh:
+                # a Nambu shift is -mu on the electrons and +mu on the
+                # holes, not a rigid one, so h is shifted first and then
+                # solved; the Fermi level is that of the paired state, as
+                # in the bdg_fermi branch below
+                if mu is None: h = bdg_fermi.shift(h, fermi_offset[0])
+                else: h.shift_fermi(-mu)
+                dm_lab = ultracell.dm(h, sparse_needed)
+                if mu is None:
+                    fermi_offset[0] = bdg_fermi.step(fermi_offset[0], dm_lab)
+            elif mu is None:
                 dm_lab, fermi = ultracell.dm_with_fermi(h, sparse_needed,
                         filling)
                 h.fermi = fermi

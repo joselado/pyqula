@@ -49,6 +49,14 @@ class Ultracell():
     outside the window. A frozen state does not respond to the modulation.
     u.window, u.emin and u.emax keep the window.
 
+    For a Nambu (BdG) hs the cut is measured from the zero of the BdG
+    Hamiltonian and is symmetric: emax=x keeps the BdG states with
+    |E|<=x, the window (-x,x), and a window with emin != -emax is a
+    ValueError, since its kept states would not be closed under
+    particle-hole symmetry. The BdG states below -x are frozen, with their
+    anomalous part. With rebuild_basis=True the states are those of the
+    lattice-periodic part of hs, counted by energy and not by index.
+
     rebuild_basis=True takes, at each folded momentum, the states of the
     lattice-periodic part of hs instead of those of h, as many frozen and
     as many kept as the window holds in h. This is the default of the mean
@@ -98,10 +106,10 @@ class Ultracell():
         """Self-consistent mean field of the supercell, with the density
         matrix, the Fermi level and the band energy of every iteration
         computed in the ultracell states (integration="ultracell"). It takes
-        the keywords of h.get_mean_field_hamiltonian() for a normal-state
-        Hamiltonian: U, V1, V2, V3, Vr, and for a spinful one the spin-spin
-        exchange J1, J2, J3, Jr (J1x, J1y, J1z), filling or mu, mf, nk (the
-        mesh of the ultracell, 1 by default), T, mix, maxerror, maxite, ...
+        the keywords of h.get_mean_field_hamiltonian(): U, V1, V2, V3, Vr,
+        and for a spinful one the spin-spin exchange J1, J2, J3, Jr (J1x,
+        J1y, J1z), filling or mu, mf, nk (the mesh of the ultracell, 1 by
+        default), T, mix, maxerror, maxite, ...
         Returns the Ultracell of the converged mean-field supercell, with
         the same window and the basis of the loop (rebuilt from the
         converged supercell with rebuild_basis=True, the clean one
@@ -124,14 +132,30 @@ class Ultracell():
         With False the basis stays the one of the clean unit cell, which
         with a cut misses a uniform order: for the antiferromagnet of
         graphene at U=3t, cut at emax=0.5, the moment came out 0.41 off
-        with the clean basis and 0.004 off with the rebuilt one"""
+        with the clean basis and 0.004 off with the rebuilt one.
+
+        A Nambu (BdG) supercell takes the cut |E|<=emax on the BdG states
+        of the lattice-periodic part of each Hamiltonian, shifted by its
+        chemical potential, counted again by energy at every iteration,
+        and the Fermi level of a filling from superscf.BdGFermiLevel, the
+        electrons being solved in a folded basis of their own. The frozen
+        BdG states carry their anomalous part, so a uniform paired state
+        is exact for any emax. With a cut it needs rebuild_basis=True: the
+        clean basis is centered on the chemical potential of h, which the
+        loop moves. Two limits are worth knowing: the frozen states do not
+        respond, so the modulated part of the pairing converges only about
+        logarithmically in emax (a pair density wave with no uniform part
+        needs a table of results in emax), and the count by energy can
+        change the number of kept states by a multiplet between iterations"""
         if "integration" in kwargs:
             raise ValueError("the ultracell sets integration=\"ultracell\" "
                     "itself; do not pass integration")
-        if self.hs.has_eh:
-            raise NotImplementedError("the mean field of the ultracell is "
-                    "not implemented for a Hamiltonian with the "
-                    "electron-hole (Nambu) degree of freedom")
+        if self.hs.has_eh and self.basis.has_cut and not rebuild_basis:
+            raise NotImplementedError("the Nambu mean field of an ultracell "
+                    "with a cut is only implemented with rebuild_basis=True: "
+                    "the cut |E|<=emax is measured from the chemical "
+                    "potential, which moves in the loop, and the clean basis "
+                    "is centered on the one of the unit cell")
         exchange = [k for k in ("J1","J2","J3","Jr","J1x","J1y","J1z")
                 if kwargs.get(k) is not None and np.any(kwargs.get(k)!=0.)]
         if len(exchange)>0 and not self.hs.has_spin:
@@ -139,9 +163,14 @@ class Ultracell():
             check.require_spin(self.hs,"the spin-spin exchange "
                     +str(exchange))
         hs = self.hs.copy()
+        # the electrons of a Nambu supercell, for the Fermi level of their
+        # normal state (ultracelltk.meanfield.SparseBackend.normal_fermi)
+        normal = basistk.electron_basis(self.h,hs,self.window) \
+                if hs.has_eh else None
         hs.ultracell_basis = basistk.FoldedBasis(self.h,hs,
                 window=self.window)
         hs.ultracell_basis.rebuild = bool(rebuild_basis)
+        hs.ultracell_basis.normal = normal
         kwargs.setdefault("nk",1)
         out = hs.get_mean_field_hamiltonian(integration="ultracell",
                 return_total_energy=return_total_energy,**kwargs)

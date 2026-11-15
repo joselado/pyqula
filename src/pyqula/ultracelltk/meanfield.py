@@ -34,6 +34,19 @@ clean states with the clean basis, and from the rebuilt ones at every
 iteration otherwise. The Fermi search counts them as full levels below
 every kept one, and the band energy adds their energies in the
 lattice-periodic part of the Hamiltonian.
+
+A Nambu (BdG) supercell takes the cut |E|<=emax from the zero of the BdG
+Hamiltonian, on the BdG states of the lattice-periodic part of the shifted
+Hamiltonian, counted again by energy at every iteration (basis.center).
+The gap equation sums over every BdG state, so the frozen ones below -emax
+carry their anomalous block too, and a uniform paired state is exact for
+any emax. Particle-hole symmetry maps kS to -kS, the mesh is closed under
+it, and the symmetric window maps the frozen states at p to the dropped
+ones at -p, so the kept space is closed over the mesh. Two limits are
+worth knowing. The frozen states do not respond, so the modulated part of
+the pairing converges only slowly, about logarithmically, with emax. And
+the count by energy can change the number of kept states by a multiplet
+between iterations.
 """
 
 import numpy as np
@@ -41,7 +54,7 @@ from scipy.linalg import eigh
 from scipy.sparse import csr_matrix
 from numba import jit, prange
 
-from .basis import pad3, HoppingSum
+from .basis import pad3, HoppingSum, eigh_momenta
 from .matrix import ultracell_matrix, real_space_states, state_chunks
 
 # a state above the Fermi level by this many times the smearing has an
@@ -57,10 +70,6 @@ def get_basis(h):
                 "Hamiltonian of an ultracell, which "
                 "u.get_mean_field_hamiltonian() builds; build "
                 "u = h.get_ultracell(hs) and call it there")
-    if h.has_eh:
-        raise NotImplementedError("the mean field of the ultracell is not "
-                "implemented for a Hamiltonian with the electron-hole "
-                "(Nambu) degree of freedom")
     if h.non_hermitian:
         raise NotImplementedError("the mean field of the ultracell is only "
                 "implemented for a Hermitian Hamiltonian")
@@ -113,23 +122,41 @@ def frozen_levels(basis,kS,Ef,Uf,validf,hp):
     return e[validf]
 
 
+def electron_trace(hk):
+    """Tr h_e(k), the electron diagonal of the Bloch Hamiltonian hk of a
+    Nambu supercell, whose electrons are the orbitals 4i and 4i+1"""
+    d = np.asarray(hk.diagonal()).ravel()
+    return float(np.real(np.sum(d[np.arange(len(d))%4<2])))
+
+
+def mesh_levels(basis,hsum,ks):
+    """Every level of the unit-cell Bloch Hamiltonian hsum (a HoppingSum)
+    at the folded momenta of every kS of the mesh ks, as one array"""
+    return np.concatenate([eigh_momenta(hsum,basis.folded_momenta(k))[0]
+        .ravel() for k in ks])
+
+
 class MeshStates():
     """The ultracell eigenstates of h at every kpoint of a mesh: per
     kpoint the eigenvalues, the eigenvectors in the kept states and the
     unit-cell vectors of the basis, and the frozen states below the
     window, their vectors and their energies (frozen_levels), from the
-    same diagonalization of the unit cell as the kept ones"""
+    same diagonalization of the unit cell as the kept ones. For a Nambu h
+    it also keeps Tr h_e of every kpoint, for the band energy"""
     def __init__(self,h,nk=1):
         self.basis = loop_basis(h)
         hkgen = sparse_hk_gen(h)
         self.ks = np.array(h.geometry.get_kmesh(nk=nk)) # the mesh of "ed"
         self.n = h.intra.shape[0] # orbitals of the supercell
+        self.has_eh = h.has_eh
         self.es,self.vs,self.Us,self.valid = [],[],[],[]
-        self.frozen,self.ef = [],[]
+        self.frozen,self.ef,self.trhe = [],[],[]
         hp = periodic_part(self.basis,h)
         for k in self.ks:
             E,U,valid,Ef,Uf,validf = self.basis.states(k,frozen=True)
-            H = ultracell_matrix(self.basis,hkgen(k),k,E,U,valid)
+            hk = hkgen(k)
+            if h.has_eh: self.trhe.append(electron_trace(hk))
+            H = ultracell_matrix(self.basis,hk,k,E,U,valid)
             # H is in column order and not used after, so eigh works on
             # it in place instead of on a copy
             es,vs = eigh(H,overwrite_a=True)
@@ -299,7 +326,11 @@ class SparseBackend():
     (scftk.densitydensity_kpm.generic_densitydensity_kpm) takes it as its
     fermi object, the interface of kpmtk.densitymatrix_kpm.LaggedFermi:
     shift(h) finds the Fermi level of h at self.filling exactly and shifts
-    h by it, so its error is zero, and dm(h) then takes the same states"""
+    h by it, so its error is zero, and dm(h) then takes the same states.
+    A Nambu h is not shifted rigidly by a chemical potential, so the
+    spinful loop shifts it first and calls dm(h), with the Fermi level of
+    superscf.BdGFermiLevel, whose search and compressibility are
+    normal_fermi and normal_compressibility"""
     def __init__(self,nk=1,T=None,filling=None):
         self.nk = nk
         # the occupations and the Fermi search at the same smearing, as
@@ -331,6 +362,13 @@ class SparseBackend():
     def fermi(self,states,filling):
         """The Fermi level of the states at filling, by which their
         eigenvalues are then shifted; the frozen states must lie below it"""
+        if states.has_eh:
+            raise NotImplementedError("a Nambu Hamiltonian is not shifted "
+                    "rigidly by a chemical potential (-mu on the electrons, "
+                    "+mu on the holes), so its states cannot be shifted "
+                    "after the search; shift it first, with "
+                    "superscf.BdGFermiLevel or h.shift_fermi(-mu), and call "
+                    "dm(h)")
         fermi = fermi_level(states.eigenvalues(),states.n,filling,
                 T=self.delta,nfrozen=states.nfrozen)
         states.shift = -fermi # the eigenvalues of the shifted h
@@ -367,10 +405,67 @@ class SparseBackend():
         "ed"; from the states of the last density matrix if it was of h.
         The frozen states are full and add Tr[P_f H_P], their energies in
         the lattice-periodic part of h (frozen_levels), so that the band
-        energy is Tr[rho H] for the density matrix of dm_entries"""
+        energy is Tr[rho H] for the density matrix of dm_entries. For a
+        Nambu h it is (S + Tr h_e)/2 at every kpoint, as
+        spectrum.total_energy, with S that sum and Tr h_e the electron
+        diagonal of the Bloch Hamiltonian of the supercell"""
         states = self.states if h is self.h else MeshStates(h,nk=self.nk)
-        return np.mean([np.sum(e[e<0.]) + np.sum(ef) for e,ef in
-            zip(states.eigenvalues(),states.frozen_eigenvalues())])
+        s = [np.sum(e[e<0.]) + np.sum(ef) for e,ef in
+            zip(states.eigenvalues(),states.frozen_eigenvalues())]
+        if states.has_eh: s = [(x + t)/2. for x,t in zip(s,states.trhe)]
+        return np.mean(s)
+    def electrons(self,h):
+        """The electron sector of a Nambu h, a copy without the Nambu
+        degree of freedom (sparse when h is), and its folded basis, the
+        electron one u.get_mean_field_hamiltonian() keeps as basis.normal"""
+        b = getattr(get_basis(h),"normal",None)
+        if b is None:
+            raise ValueError("the Fermi level of a Nambu ultracell needs the "
+                    "folded basis of its electrons, which "
+                    "u.get_mean_field_hamiltonian() builds")
+        hn = h.copy() ; hn.remove_nambu()
+        return hn,b
+    def normal_fermi(self,h,filling):
+        """The Fermi level of the normal state of a Nambu h at filling, the
+        search(h,filling) of superscf.BdGFermiLevel, as
+        spectrum.get_fermi4filling of its electrons for "ed". The electrons
+        are solved in their own folded basis. With a cut it is that of the
+        lattice-periodic part of the electrons, with the window centered at
+        the Fermi level of that part, found from all its levels, and the
+        half-width of the BdG cut. Only the eigenvalues of the ultracell are
+        computed, and the states this backend keeps are left alone"""
+        hn,b = self.electrons(h)
+        b = b.rebuilt(hn) # with a cut, the states of the periodic part
+        ks = np.array(hn.geometry.get_kmesh(nk=self.nk))
+        if b.hopp is not None: # the window around its Fermi level
+            from ..spectrum import get_fermi_energy_T
+            b.center = get_fermi_energy_T(mesh_levels(b,b.hopp,ks),filling,
+                    T=self.delta)
+        hkgen = sparse_hk_gen(hn)
+        esk,nfrozen = [],0
+        for k in ks:
+            E,U,valid,Ef,Uf,validf = b.states(k,frozen=True)
+            H = ultracell_matrix(b,hkgen(k),k,E,U,valid)
+            esk.append(eigh(H,eigvals_only=True,overwrite_a=True))
+            nfrozen += int(np.sum(validf))
+        return fermi_level(esk,hn.intra.shape[0],filling,T=self.delta,
+                nfrozen=nfrozen)
+    def normal_compressibility(self,h,filling,df=0.05):
+        """dN/dmu of the normal state of a Nambu h around filling, the
+        compressibility of superscf.BdGFermiLevel, with the finite
+        difference of BdGFermiLevel.compressibility taken on all the
+        levels of the lattice-periodic part of the electrons on the folded
+        mesh: the window of normal_fermi may not hold filling +- df"""
+        from ..spectrum import get_fermi_energy_T
+        df = min(df,filling/2.,(1.-filling)/2.)
+        if df<=0.: return 1.0 # empty or full, nothing to hold
+        hn,b = self.electrons(h)
+        hp = HoppingSum(b.periodic_hoppings(hn),b.norb,dim=b.dimensionality)
+        es = mesh_levels(b,hp,np.array(hn.geometry.get_kmesh(nk=self.nk)))
+        dmu = get_fermi_energy_T(es,filling+df,T=self.delta) \
+                - get_fermi_energy_T(es,filling-df,T=self.delta)
+        dmu = max(dmu,1e-6) # a degenerate level: a small, safe step
+        return 2.*df*hn.intra.shape[0]/dmu
 
 
 def require_kept_above(esk,n,delta,emax,what,nfrozen=0):

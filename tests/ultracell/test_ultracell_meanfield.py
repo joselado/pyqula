@@ -226,9 +226,9 @@ def test_mean_field_wrong_inputs_raise():
         hl.get_ultracell(hl.get_supercell(3)).get_mean_field_hamiltonian(
                 J1=1.,write=False)
     hn = h.copy() ; hn.setup_nambu_spinor()
-    with pytest.raises(NotImplementedError):
-        hn.get_ultracell(hn.get_supercell([2,2])).get_mean_field_hamiltonian(
-                U=-1.)
+    with pytest.raises(NotImplementedError): # a Nambu cut on the clean basis
+        hn.get_ultracell(hn.get_supercell([2,2]),emax=1.
+                ).get_mean_field_hamiltonian(U=-1.,rebuild_basis=False)
 
 
 @pytest.mark.parametrize("emax",[None,0.5])

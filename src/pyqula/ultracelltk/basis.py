@@ -152,10 +152,14 @@ def energy_or_none(x,name):
         raise TypeError(name+" must be a number or None, got "+repr(x))
 
 
-def parse_window(emax=None,window=None):
+def parse_window(emax=None,window=None,nambu=False):
     """The window (emin,emax) of an ultracell, from emax= or from
     window=(emin,emax), with None for an open side. emax=x is the window
-    (None,x)"""
+    (None,x). For a Nambu (BdG) Hamiltonian, nambu=True, the window is
+    measured from the zero of the BdG Hamiltonian and is symmetric, so that
+    the kept states are closed under particle-hole symmetry: emax=x is the
+    window (-x,x), the cut |E|<=x, and window=(emin,emax) needs
+    emin=-emax"""
     if emax is not None and window is not None:
         raise ValueError("give the cut as emax= or as window=(emin,emax), "
                 "not both; got emax="+repr(emax)+" and window="+repr(window))
@@ -167,6 +171,19 @@ def parse_window(emax=None,window=None):
                     "or None, got "+repr(window))
     emin = energy_or_none(emin,"emin")
     emax = energy_or_none(emax,"emax")
+    if nambu and window is None and emax is not None: # |E| <= emax
+        if emax<=0.:
+            raise ValueError("the Nambu cut |E|<=emax needs emax>0, got "
+                    "emax="+repr(emax))
+        emin = -emax
+    elif nambu and (emin is not None or emax is not None):
+        if emin is None or emax is None or \
+                abs(emin+emax)>1e-12*max(1.,abs(emax)):
+            raise ValueError("a Nambu window must be symmetric about zero "
+                    "energy, window=(-x,x), so that the kept states are "
+                    "closed under particle-hole symmetry; got window="
+                    +repr(window)+", give emax=x for the cut |E|<=x")
+        emin = -emax # exactly symmetric
     if emin is not None and emax is not None and emin>=emax:
         raise ValueError("the window (emin,emax) needs emin < emax, got "
                 +repr((emin,emax)))
@@ -202,6 +219,19 @@ def eigh_momenta(hsum,ps,chunk=2**22):
         e,w = np.linalg.eigh(hsum(ps[i:i+nb]))
         es.append(e) ; ws.append(w)
     return np.concatenate(es),np.concatenate(ws)
+
+
+def electron_basis(h,hs,window):
+    """The folded basis of the electrons alone of a Nambu unit cell h and
+    its supercell hs, for the Fermi level of their normal state
+    (meanfield.SparseBackend.normal_fermi). Its window, (emin,emax) of
+    window, is measured from its center, which each search sets at the
+    Fermi level of the lattice-periodic part of the electrons"""
+    he = h.copy() ; he.remove_nambu()
+    hse = hs.copy() ; hse.remove_nambu()
+    b = FoldedBasis(he,hse,window=window)
+    b.center = 0. # set by each search
+    return b
 
 
 class FoldedBasis():
@@ -270,8 +300,15 @@ class FoldedBasis():
         # momenta, in C order
         self.hop0 = HoppingSum(h.get_multihopping().get_dict(),self.norb,
                 dim=self.dimensionality) # Bloch Hamiltonian of the unit cell
-        self.emin,self.emax = parse_window(emax,window)
+        self.emin,self.emax = parse_window(emax,window,nambu=hs.has_eh)
         self.window = (self.emin,self.emax)
+        # None: the window is in absolute energies, and a rebuilt basis
+        # carries the ranges of the clean cell by index. A number: the
+        # window is measured from it, and a rebuilt basis recounts the
+        # ranges by energy on its own levels, as the Nambu cut |E|<=emax
+        # from the zero of the BdG Hamiltonian, whose chemical potential
+        # moves in the loop
+        self.center = 0. if hs.has_eh else None
         self.rebuild = False # the clean states, see states()
         self.hopp = None # the lattice-periodic part, see rebuilt()
         self._ranges = {} # the ranges of the clean window, per kS
@@ -338,30 +375,39 @@ class FoldedBasis():
             ranges = self.rebuilt_ranges(kS,e)
         else:
             e,w = eigh_momenta(self.hop0,self.folded_momenta(kS))
-            ranges = [window_range(e[iq],self.emin,self.emax)
-                    for iq in range(self.N)]
+            ranges = self.energy_ranges(e)
         out = self.pad([e[iq,i0:i1] for iq,(i0,i1) in enumerate(ranges)],
                 [w[iq,:,i0:i1] for iq,(i0,i1) in enumerate(ranges)])
         if not frozen: return out
         return out + self.pad([e[iq,0:i0] for iq,(i0,i1) in enumerate(ranges)],
                 [w[iq,:,0:i0] for iq,(i0,i1) in enumerate(ranges)])
+    def energy_ranges(self,e):
+        """The ranges [i0,i1) of the window on the levels e (N,norb), by
+        energy, measured from the center when there is one"""
+        c = 0. if self.center is None else self.center
+        return [window_range(e[iq]-c,self.emin,self.emax)
+                for iq in range(len(e))]
     def clean_ranges(self,kS):
         """The ranges [i0,i1) of the window on the levels of the clean unit
         cell at every folded momentum of kS, computed once per kS"""
         key = tuple(np.round(pad3(kS),12))
         if key not in self._ranges:
             e = eigh_momenta(self.hop0,self.folded_momenta(kS))[0]
-            self._ranges[key] = [window_range(e[iq],self.emin,self.emax)
-                    for iq in range(self.N)]
+            self._ranges[key] = self.energy_ranges(e)
         return self._ranges[key]
     def rebuilt_ranges(self,kS,e):
         """The ranges of the levels e (N,norb) of the lattice-periodic part
-        at the folded momenta of kS: as many frozen and as many kept states
-        per momentum as the window holds in the clean unit cell, both edges
-        completed outward so that a degenerate level is kept whole. A
-        lattice-periodic part of the modulation or of a mean field (a
-        uniform moment, a uniform shift) is then in the basis, and does
-        not have to be built from the states the cut leaves out"""
+        at the folded momenta of kS. Without a center, as many frozen and
+        as many kept states per momentum as the window holds in the clean
+        unit cell, both edges completed outward so that a degenerate level
+        is kept whole. A lattice-periodic part of the modulation or of a
+        mean field (a uniform moment, a uniform shift) is then in the
+        basis, and does not have to be built from the states the cut
+        leaves out. With a center, the ranges are counted again by energy
+        on these levels, never from the cache of the clean ones, since the
+        center (the chemical potential of a BdG Hamiltonian) moves the
+        levels with respect to the clean ones"""
+        if self.center is not None: return self.energy_ranges(e)
         return [(lower_level(e[iq],i0),complete_level(e[iq],i1))
                 for iq,(i0,i1) in enumerate(self.clean_ranges(kS))]
     def pad(self,es,ws):
