@@ -79,6 +79,12 @@ def get_hamiltonian(self,tij=None,has_spin=True,
     if self.dimensionality in [1,2] and (tij is not None or
             mgenerator is not None):
         is_multicell = True
+    # the default first-neighbor hopping keeps the single-cell storage,
+    # which most code reads, unless a first neighbor lies outside its 9
+    # cells, as on a strongly sheared cell (a2' = a2 + 2 a1)
+    if self.dimensionality in [1,2] and tij is None and mgenerator is None \
+            and not is_multicell and neighbor_outside_cells(self):
+        is_multicell = True
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
     h.is_sparse = is_sparse
@@ -95,6 +101,7 @@ def get_hamiltonian(self,tij=None,has_spin=True,
         elif box or self.dimensionality==0: cut = None
         else: cut = 5.0
         reach = cut if cut is not None else 5.0 # the cells to evaluate
+        if tij is None and mgenerator is None: reach = 1.1 # first neighbors
         # a Hermitian Hamiltonian is evaluated on one cell of each pair R,
         # -R and the other is its adjoint; a non-Hermitian one on both
         cells = hopping_cells(self,nc,nc_given,kwargs,rcut=reach,
@@ -180,6 +187,20 @@ def hopping_cells(g,nc,nc_given,kwargs,rcut=5.0,half=True):
     cells = [c for c in cells if c!=(0,0,0)]
     if half: cells = [c for c in cells if is_forward(c)]
     return cells
+
+
+def neighbor_outside_cells(g):
+    """Whether a first neighbor of g, at distance 1, lies in a cell outside
+    |n_k| <= 1, which the single-cell storage of 1d and 2d (inter, tx, ty,
+    txy, txmy and their adjoints) cannot hold"""
+    from ..neighbor import find_first_neighbor
+    r = np.array(g.r)
+    A = np.array([g.a1,g.a2,g.a3])
+    for c in specialhopping.cells_within(g,1.01):
+        if max(abs(x) for x in c)<=1: continue # in the single-cell storage
+        if len(find_first_neighbor(r,r+np.array(c,dtype=float)@A))>0:
+            return True
+    return False
 
 
 def cut_pairs(h,rcut):
