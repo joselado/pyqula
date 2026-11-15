@@ -198,10 +198,14 @@ real and finite raises. `tests/classicalspin/test_coupling_range.py` (10
 tests) holds, on the three models, a function against the same shells as a
 list on the one-site chain, the energy per site of an alternating state in a
 cell of two and of six sites, a uniform local energy on a 6x6 or 4x4 cell,
-and every pair of a finite chain; all 10 fail on the code before. Still
-open: a `HoppingGenerator` (`specialhopping.NNG`), which in 1D and 2D also
-lands in the single-cell storage, since `distance_cut_interaction` takes a
-pair function and not a matrix generator; and the hoppings built with
-`mgenerator` and the default `nc=2` (for instance in
+and every pair of a finite chain; all 10 fail on the code before. The same
+night a `HoppingGenerator` (`specialhopping.NNG` and the others), which in 1D
+and 2D also landed in the single-cell storage, took the same route:
+`specialhopping.generator_within` evaluates its matrix generator on every
+cell that holds a pair within `rcut` and drops the pairs beyond it; three
+more tests hold `NNG(g,[0,J2])` against the list on the one-site chain, and
+the couplings of the finite ladder of
+`examples/classicalspin/modulated_ladder` are unchanged. Still open: the
+hoppings built with `mgenerator` and the default `nc=2` (for instance in
 `specialhamiltonian.py`), which have the range of the old shells and were
 not checked.

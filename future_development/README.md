@@ -675,9 +675,10 @@ already reached once.
   or skewed cells) in every mean field, RPA, BSE and spinon route, while
   Vr/Jr were right; one shared builder with a range per lattice direction
   repairs all six. The classical spin, Ising and lattice-gas couplings
-  given as a function take every pair within `rcut=` since 15 November
-  2026. Open: the composite fermion of a bond, the notebook, and the same
-  for a `HoppingGenerator`.
+  given as a function or a `HoppingGenerator` take every pair within
+  `rcut=` since 15 November 2026. Open: the composite fermion of a bond,
+  the notebook, and the electronic hoppings built with `mgenerator` and the
+  default `nc=2`.
 
 - [`inplane_valley.md`](inplane_valley.md) -- the check of `valley_x`,
   `valley_y` and `add_valley_exchange`, and their replacement by a closed

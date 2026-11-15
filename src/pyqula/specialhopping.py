@@ -388,11 +388,15 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
     It used to go through the single-cell storage of g.get_hamiltonian,
     which in 1D and 2D keeps only the neighboring cells, so a coupling two
     cells away on a small cell was dropped, and on a large cell the pairs
-    kept depended on where the site sits in the cell. A list of shell
-    couplings, a HoppingGenerator or None goes through
-    g.get_hamiltonian(tij=Jij) as before; rcut is for a function only"""
+    kept depended on where the site sits in the cell. A HoppingGenerator
+    (NNG and the others) is evaluated the same way on every cell within
+    rcut (generator_within). A list of shell couplings or None goes through
+    g.get_hamiltonian(tij=Jij) as before, with the range of its shells;
+    rcut is for a function or a generator only"""
     from scipy.sparse import coo_matrix
-    if callable(Jij) and not isinstance(Jij,HoppingGenerator):
+    if isinstance(Jij,HoppingGenerator): # a matrix of couplings per cell
+        return coo_matrix(generator_within(g,Jij.f,rcut=rcut))
+    if callable(Jij):
         ms = distance_cut_interaction(g,Jij,rcut=rcut,name=name)
         return coo_matrix(sum(ms.values()))
     if rcut is not None:
@@ -401,6 +405,26 @@ def folded_interaction(g,Jij=None,rcut=None,name="Jij"):
                 "one; a list of shell couplings has the range of its shells")
     h = g.get_hamiltonian(has_spin=False,tij=Jij)
     return coo_matrix(h.get_hk_gen()([0.,0.,0.])) # the k=0 matrix
+
+
+def generator_within(g,fm,rcut=None):
+    """The couplings of a matrix generator fm(rs1,rs2), the coupling of
+    every position of rs1 with every position of rs2, between the sites of
+    g and those of every cell that holds a pair within rcut, each pair
+    beyond rcut dropped, folded onto the cell (the k=0 matrix). rcut=None
+    is every pair of a finite system and 5.0 for a periodic one, as in
+    distance_cut_interaction"""
+    r = np.array(g.r)
+    if g.dimensionality==0 and rcut is None: return np.array(fm(r,r))
+    rcut = 5.0 if rcut is None else float(rcut)
+    out = 0.
+    for d in cells_within(g,rcut):
+        R = d[0]*np.array(g.a1) + d[1]*np.array(g.a2) + d[2]*np.array(g.a3)
+        m = np.array(fm(r,r+R),dtype=np.complex128)
+        dist = np.linalg.norm(r[None,:,:]+R-r[:,None,:],axis=2) # |r_j+R-r_i|
+        m[dist>rcut+1e-6] = 0. # a shell sitting at rcut is kept whole
+        out = out + m
+    return out
 
 
 def add_distance_cut_interaction(v,g,Vr,rcut=None,name="Vr",onsite=True):

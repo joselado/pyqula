@@ -121,3 +121,17 @@ def test_finite_system_keeps_every_pair_and_rcut_needs_a_function():
     assert np.sum(np.abs(m.j)>0)==8*7 # every ordered pair
     with pytest.raises(ValueError):
         LatticeIsing(geometry.chain()).add_interaction(Jij=[1.],rcut=3.)
+
+
+@pytest.mark.parametrize("model",MODELS)
+def test_a_hopping_generator_gives_the_shells_of_a_list(model):
+    """The same for a coupling given as a HoppingGenerator, here the
+    neighbor-shell generator NNG: on the chain of one site its second
+    shell is two cells away"""
+    from pyqula.specialhopping import NNG
+    g = geometry.chain()
+    x = [1.]
+    _,e1 = build(model,g,Jij=NNG(g,[0.,0.7]))
+    _,e2 = build(model,g,Jij=[0.,0.7])
+    assert abs(e1(x)-e2(x))<1e-10
+    assert abs(e1(x))>0.1
