@@ -145,10 +145,15 @@ def dm_entries(states,needed,delta):
     {d: values}, with the convention of integration="ed",
     dm[d][i,j] = (1/Nk) sum_k exp(2 pi i k.d) sum_s f_s conj(phi_s(i)) phi_s(j),
     the transpose of rho. At one kpoint the sum over the states is the same
-    for every direction, so it is taken once on the union of the pairs"""
+    for every direction, so it is taken once on the union of the pairs.
+    At one kpoint the sum of (j,i) is the conjugate of the sum of (i,j),
+    and the entry at d and its Fock partner at -d ask for both, so the
+    sums are taken on the pairs with i<=j and the others are conjugated"""
     n = states.n
-    keys = {d: np.asarray(r,dtype=np.int64)*n + np.asarray(c,dtype=np.int64)
+    rc = {d: (np.asarray(r,dtype=np.int64),np.asarray(c,dtype=np.int64))
             for d,(r,c) in needed.items()}
+    keys = {d: np.minimum(r,c)*n + np.maximum(r,c) for d,(r,c) in rc.items()}
+    lower = {d: r>c for d,(r,c) in rc.items()} # conjugate of (c,r)
     union = np.unique(np.concatenate([np.zeros(0,dtype=np.int64)]
         + list(keys.values())))
     ur,uc = union//n,union%n
@@ -159,7 +164,9 @@ def dm_entries(states,needed,delta):
         for occ,Phi in occupied(states,ik,delta):
             s = s + pair_sums(Phi,occ,ur,uc)
         for d in vals:
-            vals[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*s[where[d]]
+            sd = s[where[d]] # a copy
+            sd[lower[d]] = np.conjugate(sd[lower[d]])
+            vals[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*sd
     for d in vals: vals[d] /= len(states.ks)
     return vals
 
