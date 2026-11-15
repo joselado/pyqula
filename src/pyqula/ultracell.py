@@ -85,7 +85,10 @@ class Ultracell():
         exchange J1, J2, J3, Jr (J1x, J1y, J1z), filling or mu, mf, nk (the
         mesh of the ultracell, 1 by default), T, mix, maxerror, maxite, ...
         Returns the Ultracell of the converged mean-field supercell, with
-        the same basis, and its total energy with return_total_energy=True.
+        the same cut emax and the basis of the loop (rebuilt from the
+        converged supercell with rebuild_basis=True, the clean one
+        otherwise, whatever the basis of this ultracell), and its total
+        energy with return_total_energy=True.
 
         A spinful supercell runs on the sparse engine of the spin-spin mean
         field (scftk.spinspin), a spinless one on the sparse loop of
