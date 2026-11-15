@@ -106,19 +106,47 @@ potential, an exchange field with `hs.add_exchange()`, a pairing with
 `hs.add_swave()`, or hoppings that change from cell to cell. The supercell
 must keep every site.
 
+See `examples/2d/ultracell/main.py`.
+
+## A supercell along other vectors: the Kekule order
+
 The supercell does not have to be along the lattice vectors of the unit cell.
-An example is the $\sqrt3\times\sqrt3$ cell of a Kekule order of graphene. Its
-lattice vectors are $\mathbf A_S=M\mathbf A$ with an integer matrix $M$, and the
-momenta that fold onto $\mathbf k_S$ are then
+An example is the $\sqrt3\times\sqrt3$ cell of a Kekule order of graphene, a
+modulation of the first-neighbor hoppings with the wavevector
+$\mathbf K-\mathbf K'$. Its lattice vectors are $\mathbf A_S=M\mathbf A$ with an
+integer matrix $M$, and the momenta that fold onto $\mathbf k_S$ are then
 $\mathbf p_{\mathbf q}=M^{-1}(\mathbf k_S+\mathbf q)$. `h.get_supercell()` takes
 the matrix $M$ in place of the number of repetitions:
 
 ```python
-hs = h.get_supercell([[2,1,0],[-1,1,0],[0,0,1]]) # the sqrt3 x sqrt3 cell
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # unit cell of graphene
+h = g.get_hamiltonian(has_spin=False) # first-neighbor hopping, t=1
+M = [[2,1,0],[-1,1,0],[0,0,1]] # the sqrt3 x sqrt3 cell, A_S = M A
+hs = h.get_supercell(M) # the ultracell, written as a supercell
+hs.add_kekule(0.1) # the Kekule modulation of the hoppings
 u = h.get_ultracell(hs) # the momenta fold with the matrix of the cell
+(k,e,a) = u.get_kdos_bands(energies=np.linspace(-1.,1.,301),nk=400,delta=0.01)
 ```
 
-See `examples/2d/ultracell/main.py`.
+![The unfolded spectral function of graphene with a Kekule order, along the k-path of graphene.](img/ultracell_kekule.png#only-light)
+![The unfolded spectral function of graphene with a Kekule order, along the k-path of graphene.](img/ultracell_kekule-dark.png#only-dark)
+
+The Kekule order couples $\mathbf K$ and $\mathbf K'$, which both fold onto the
+center of the small Brillouin zone, so it opens a gap at the Dirac point. The
+unfolded spectral function shows this gap at $\mathbf K$ and at $\mathbf K'$:
+the levels closest to zero energy are at $\pm0.1t$ for `add_kekule(0.1)`, a gap
+of $0.2t$. Away from the Dirac points the weight follows the bands of graphene.
+This is what ARPES sees on graphene with a Kekule order.
+
+??? example "Code of this figure (documentation/figures/ultracell_kekule.py)"
+
+    ```python
+    --8<-- "ultracell_kekule.py"
+    ```
+
+See `examples/2d/ultracell_kekule/main.py`.
 
 ## Local density of states and charge
 
