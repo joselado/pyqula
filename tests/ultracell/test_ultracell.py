@@ -331,23 +331,31 @@ def test_wrong_inputs_raise():
         h.get_ultracell(gs.get_hamiltonian())
 
 
-def test_states_in_chunks_give_the_same_observables(monkeypatch):
-    """The states go to the supercell orbitals a chunk at a time, to bound
-    the memory; with chunks of a few states the local density of states,
-    the expectation values and the density matrix must not change"""
+@pytest.mark.parametrize("size",[3,8])
+def test_states_in_chunks_give_the_same_observables(monkeypatch,size):
+    """The states go to the supercell orbitals a chunk at a time, and the
+    matrix is built for a group of momenta at a time, to bound the memory;
+    with chunks of a few states, and groups of one or a few momenta, the
+    spectrum, the local density of states, the expectation values and the
+    density matrix must not change"""
     from pyqula.ultracelltk import matrix
     from pyqula.ultracelltk.meanfield import MeshStates, dm_full
     h,hs = modulated_honeycomb((3,2))
     u = h.get_ultracell(hs,emax=1.0)
+    kS = np.array([0.31,0.17,0.])
     def compute():
         hm = u.hs.copy()
         hm.ultracell_basis = u.basis
-        return (u.get_ldos(e=0.3,delta=0.05,nk=2,write=False)[2],
+        return (np.concatenate([eigh(u.get_hk_gen()(kS),eigvals_only=True),
+                u.get_ldos(e=0.3,delta=0.05,nk=2,write=False)[2]]),
                 u.get_vev(operator="sz",nk=2),
                 dm_full(MeshStates(hm,nk=2),[(0,0,0),(1,0,0)],1e-7))
     l1,v1,d1 = compute()
-    monkeypatch.setattr(matrix,"chunk_entries",3*hs.intra.shape[0])
-    assert len(matrix.state_chunks(u.basis,10))==4 # chunks of 3 states
+    monkeypatch.setattr(matrix,"chunk_entries",size*hs.intra.shape[0])
+    assert len(matrix.state_chunks(u.basis,10))==-(-10//size) # chunks
+    E,U,valid = u.basis.states(kS)
+    groups = matrix.momentum_groups(u.basis,np.sum(valid,axis=1))
+    assert 1<len(groups)<u.basis.N or size==3 # groups of a few momenta
     l2,v2,d2 = compute()
     assert np.max(np.abs(l1-l2))<1e-12
     assert np.max(np.abs(v1-v2))<1e-12

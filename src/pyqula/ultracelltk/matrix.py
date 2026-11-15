@@ -9,10 +9,10 @@ folded momenta that differ by one of its harmonics. Nothing assumes the
 modulation is onsite: hoppings, spin-orbit coupling or pairing that change
 from cell to cell are projected the same way.
 
-The matrix is built one column block q' at a time: H_S applied to the
-basis vectors of q' (a sparse product), then an FFT over the cells gives
-their components at every q at once, which costs N log N instead of the N
-separate projections.
+The matrix is built one group of column blocks q' at a time: H_S applied
+to the basis vectors of those q' (a sparse product), then an FFT over the
+cells gives their components at every q at once, which costs N log N
+instead of the N separate projections.
 """
 
 import numpy as np
@@ -32,15 +32,33 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
     offsets = np.concatenate([[0],np.cumsum(counts)])
     rows = valid.ravel()
     H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128)
-    for iq in range(N): # column block of the folded momentum q'
-        b = counts[iq]
-        if b==0: continue
-        B = basis.basis_block(kS,U,iq)[:,0:b] # (norbs,b)
-        Y = np.asarray(hk@B) # H_S applied to the basis vectors of q'
-        Yq = basis.from_supercell(kS,Y) # (N,norb,b), components at every q
+    for g0,g1 in momentum_groups(basis,counts): # consecutive momenta q'
+        B = np.hstack([basis.basis_block(kS,U,iq)[:,0:counts[iq]]
+            for iq in range(g0,g1)]) # their basis vectors, (norbs,nb)
+        Y = np.asarray(hk@B) # H_S applied to the basis vectors
+        Yq = basis.from_supercell(kS,Y) # (N,norb,nb), components at every q
         blocks = np.einsum("qam,qan->qmn",np.conjugate(U),Yq) # U_q^dag Y_q
-        H[:,offsets[iq]:offsets[iq+1]] = blocks.reshape(N*bmax,b)[rows]
+        H[:,offsets[g0]:offsets[g1]] = blocks.reshape(N*bmax,-1)[rows]
     return 0.5*(H + np.conjugate(H.T)) # Hermitian up to rounding
+
+
+def momentum_groups(basis,counts):
+    """Ranges (g0,g1) of consecutive folded momenta whose kept states, at
+    most chunk_entries/norbs of them unless one momentum has more, are
+    built together; momenta with no kept state are left out"""
+    size = max(1,chunk_entries//(basis.N*basis.norb))
+    groups,g0,nb = [],None,0
+    for iq,b in enumerate(counts):
+        if b==0: # nothing kept, the group ends here
+            if g0 is not None: groups.append((g0,iq))
+            g0,nb = None,0
+            continue
+        if g0 is not None and nb+b>size: # full
+            groups.append((g0,iq)) ; g0,nb = None,0
+        if g0 is None: g0 = iq
+        nb += b
+    if g0 is not None: groups.append((g0,len(counts)))
+    return groups
 
 
 def eigenstates(basis,hk,kS):
