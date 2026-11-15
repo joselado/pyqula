@@ -169,6 +169,24 @@ def test_ldos_and_expectation_values_are_the_supercell():
         assert np.max(np.abs(v1-v2))<1e-10
 
 
+def test_level_at_the_fermi_energy_is_half_occupied():
+    """A level at zero energy, up to rounding, is half occupied by the
+    smearing of hs.get_vev(), so the occupation of each site must be that
+    of the supercell whatever the sign of the rounding of that level"""
+    g = geometry.chain()
+    h = g.get_hamiltonian(has_spin=False)
+    hs = h.get_supercell(5)
+    hs.add_onsite(lambda r: 0.3*np.cos(2*np.pi*r[0]/5+0.3)
+            + 0.1*np.sin(4*np.pi*r[0]/5))
+    e = np.linalg.eigvalsh(dense(hs.get_hk_gen()([0.,0.,0.])))
+    assert min(e[2]-e[1],e[3]-e[2])>1e-2 # the middle level is alone
+    hs.add_onsite(-e[2]) # and now at zero energy
+    u = h.get_ultracell(hs)
+    v1 = u.get_vev(nk=1)
+    v2 = hs.get_vev(nk=1)
+    assert np.max(np.abs(v1-v2))<1e-8
+
+
 def test_cut_basis_is_a_rayleigh_ritz_compression():
     """The i-th lowest level of the cut basis is never below the i-th
     lowest level of the supercell, and it comes down as emax grows"""

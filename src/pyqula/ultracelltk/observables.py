@@ -121,12 +121,18 @@ def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
 
 
 def vev(u,operator=None,nk=10):
-    """Expectation value per site of the supercell in the ground state with
-    the Fermi level at zero energy, every state below it occupied, averaged
-    over an nk mesh of the ultracell's Brillouin zone. Without an operator
-    it is the occupation of each site, as hs.get_vev(). It needs every
-    occupied state in the basis, so emax must be above zero"""
+    """Expectation value per site of the supercell with the Fermi level at
+    zero energy, averaged over an nk mesh of the ultracell's Brillouin
+    zone, with the Fermi-Dirac occupations of hs.get_vev(): at the
+    temperature of the mean field that gave hs, else at the smearing
+    delta_dm of densitymatrix, so that a level at zero energy is half
+    occupied. Without an operator it is the occupation of each site, as
+    hs.get_vev(). It needs every occupied state in the basis, so emax must
+    be above zero"""
+    from scipy.special import expit
+    from ..densitymatrix import default_smearing, nonzero_smearing
     from ..increase_hilbert import full2profile
+    from .meanfield import empty_ratio
     if u.hs.has_eh:
         raise NotImplementedError("expectation values of the ultracell are "
                 "not implemented for a Hamiltonian with the electron-hole "
@@ -144,8 +150,14 @@ def vev(u,operator=None,nk=10):
                     "a matrix on the supercell, not one defined only by its "
                     "action on a state or depending on k")
     ks = ultracell_kmesh(u,nk)
+    # the smearing hs.get_vev() reads, so that a level at the Fermi energy
+    # (the two degenerate states of a metal the loop left there, or a
+    # level at zero up to rounding) shares its electron as it does there,
+    # instead of being counted by the sign of its rounding
+    delta = nonzero_smearing(default_smearing(u.hs))
+    def occupied(es): # empty from empty_ratio smearings above zero
+        return np.where(es<=empty_ratio*delta,expit(-es/delta),0.)
     d = 0.
-    def occupied(es): return (es<0.).astype(float)
     for k in ks: d = d + site_sum(u,k,occupied,operator=op)
     return full2profile(u.hs,d/len(ks)).real
 
