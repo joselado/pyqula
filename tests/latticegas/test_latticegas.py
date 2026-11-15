@@ -67,13 +67,16 @@ def test_local_energy_matches_naive_reference():
         assert np.isclose(local[ii], expected)
 
 
-def test_local_mu_matches_naive_reference():
+def test_local_mu_is_the_energy_of_adding_a_particle():
+    """get_local_mu is E(n_i=1) - E(n_i=0) with the other sites as they
+    are, from the total energy"""
     lg = _small_lattice_gas()
     local_mu = lg.get_local_mu()
     for ii in range(lg.nsites):
-        den0 = lg.den.copy()
-        den0[ii] = 1.0
-        expected = _naive_local_energy(lg.mu, lg.pairs, lg.j, den0, ii)
+        den1, den0 = lg.den.copy(), lg.den.copy()
+        den1[ii], den0[ii] = 1., 0.
+        expected = (latticegas.energy_numba(lg.mu, lg.pairs, lg.j, den1)
+                - latticegas.energy_numba(lg.mu, lg.pairs, lg.j, den0))
         assert np.isclose(local_mu[ii], expected)
 
 
@@ -480,16 +483,19 @@ def test_grand_canonical_energy_with_self_image_pairs_does_not_drift():
 
 
 def test_local_mu_does_not_depend_on_the_occupation_of_the_site():
-    """get_local_mu is the local energy of site i with site i occupied,
-    so it must not change with den_i. The pair (i,i) of a site with its
-    own images entered as J_ii*den_i, and on the 2x2 triangular cell the
-    value changed by J_ii=1.2 when den_i went from 0 to 1"""
+    """get_local_mu is the energy cost of adding a particle on site i, so
+    it must not change with den_i, also with the pair (i,i) of a site with
+    its own images, which entered as J_ii*den_i and changed the value by
+    J_ii=1.2 on the 2x2 triangular cell; and it is the energy change of
+    the Monte Carlo flip from an empty site"""
     lg = _periodic_gas_with_self_images(seed=7)
+    ptr, idx, jarr = lg._get_adjacency()
     for i in range(lg.nsites):
         values = []
         for occupation in (0., 1.):
             lg.den[i] = occupation
             values.append(lg.get_local_mu()[i])
         assert abs(values[0] - values[1]) < 1e-12
-        # with the site occupied, it is the local energy of the site
-        assert abs(values[1] - lg.get_local_energy()[i]) < 1e-12
+        lg.den[i] = 0.
+        delta = latticegas.flip_delta_energy(lg.mu, ptr, idx, jarr, lg.den, i)
+        assert abs(values[0] - delta) < 1e-12

@@ -91,7 +91,7 @@ arrangement of vacancies. This is the quantity that diffraction measures.
 - `optimize_energy_multistart()`: keeps the best of several independent runs.
 - `optimize_grand_canonical()`: flips single occupations at chemical potential `lg.mu`, so the filling changes; use it to scan the filling as a function of the chemical potential.
 - `get_specific_heat()`, `get_susceptibility()`: thermodynamic quantities from the fluctuations along a run at fixed temperature.
-- `get_local_energy()`, `get_local_mu()`: the energy of each site, and the cost $\mu_i+\sum_k J_{ik}n_k$ of occupying it, in the current configuration.
+- `get_local_energy()`, `get_local_mu()`: the energy of each site, and the cost $\mu_i+J_{ii}+2\sum_{k\neq i}J_{ik}n_k$ of occupying it, in the current configuration.
 - `add_tensor()`: couplings that are not given by neighbor shells.
 - `write()`, `read()`: save a configuration to a file and read it back.
 

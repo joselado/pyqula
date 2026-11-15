@@ -348,9 +348,10 @@ Optional arguments:
 ### lg.get_local_energy() / lg.get_local_mu()
 `get_local_energy()` gives the energy of each site,
 $\mu_i n_i + \sum_j J_{ij} n_i n_j$; the values add up to `lg.get_energy()`.
-`get_local_mu()` gives the same expression with site $i$ occupied, meaning
-the energy cost of putting a particle on site $i$ with its neighbors as they
-are.
+`get_local_mu()` gives the energy cost of putting a particle on site $i$
+with its neighbors as they are, $\mu_i+J_{ii}+2\sum_{k\neq i}J_{ik}n_k$,
+where the 2 appears because the energy counts each pair from both of its
+sites.
 
 Optional arguments:
 
