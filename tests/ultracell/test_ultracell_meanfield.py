@@ -161,3 +161,49 @@ def test_mean_field_wrong_inputs_raise():
     with pytest.raises(NotImplementedError):
         hn.get_ultracell(hn.get_supercell([2,2])).get_mean_field_hamiltonian(
                 U=-1.)
+
+
+@pytest.mark.parametrize("emax",[None,0.5])
+def test_sparse_backend_reads_the_density_matrix(emax):
+    """The sparse engine of the spinful mean field takes the density matrix
+    at the entries it reads, at d and at -d, as csr matrices. They must be
+    those of the dense density matrix of the same ultracell states, and,
+    with every state kept, those of "ed" on the supercell, with the Fermi
+    level of the same filling"""
+    from pyqula.scftk import sparsemeanfield
+    from pyqula.ultracelltk.basis import FoldedBasis
+    from pyqula.ultracelltk.meanfield import SparseBackend, get_dm
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    h.add_rashba(0.2)
+    hs = h.get_supercell([3,2])
+    x = fractional(hs.geometry)
+    hs.add_onsite(lambda r: 0.3*np.cos(2*np.pi*x(r)[0]))
+    hs.add_exchange(lambda r: [0.2*np.sin(2*np.pi*x(r)[0]),0.,0.1])
+    hs.turn_sparse()
+    hs.ultracell_basis = FoldedBasis(h,hs,emax=emax)
+    n = hs.intra.shape[0]
+    v = sparsemeanfield.interaction(hs,V1=1.0,
+            U=np.ones(len(hs.geometry.r)))
+    needed = sparsemeanfield.needed_entries([v],n,blocks=True)
+    assert any(d!=(0,0,0) for d in needed) # bonds between supercells
+    b = SparseBackend(nk=2,T=1e-7)
+    dm,fermi = b.dm_with_fermi(hs,needed,0.5)
+    h2 = hs.copy() ; h2.shift_fermi(-fermi)
+    full = get_dm(h2,list(needed),nk=2,full=True)
+    for d,(r,c) in needed.items():
+        assert np.max(np.abs(dm[d].toarray()[r,c]-full[d][r,c]))<1e-12
+    if emax is None: # the supercell itself
+        h3 = hs.copy() ; h3.turn_dense()
+        fermi3 = h3.get_fermi4filling(0.5,nk=2,T=1e-7)
+        assert abs(fermi-fermi3)<1e-9
+        h3.shift_fermi(-fermi3)
+        eds = h3.get_density_matrix(ds=list(needed),nk=2,T=1e-7)
+        for d,(r,c) in needed.items():
+            ed = dense(eds[d])
+            assert np.max(np.abs(dm[d].toarray()[r,c]-ed[r,c]))<1e-8
+    # the band energy of the shifted Hamiltonian, from the kept states
+    hs.shift_fermi(-fermi) # the backend kept the states of hs
+    e1 = b.band_energy(hs)
+    e2 = SparseBackend(nk=2).band_energy(h2) # recomputed
+    assert abs(e1-e2)<1e-10

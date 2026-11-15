@@ -9,8 +9,8 @@ three from the ultracell states instead of the full diagonalization of the
 supercell. The states are written on the supercell orbitals, and the density
 matrix is summed from them with the convention of the "ed" backend (the
 transpose of rho), at the entries the mean field reads, as dense matrices
-for scftk.densitydensity (get_dm) or sparse ones for the sparse engines
-(get_dm_sparse).
+for scftk.densitydensity (get_dm) or sparse ones for the sparse engine of
+the spinful mean field (SparseBackend).
 
 The supercell Hamiltonian carries the folded basis as the attribute
 ultracell_basis, which u.get_mean_field_hamiltonian() sets and which the
@@ -275,16 +275,50 @@ def get_dm(h,v,nk=1,T=None,full=False):
     return outd
 
 
-def get_dm_sparse(h,needed,nk=1,T=None):
-    """Density matrix of the supercell h in its ultracell states at the
-    entries needed, {d: (rows,cols)}, as {d: csr (n,n)}, with the
-    convention of get_dm; the counterpart of
-    kpmtk.densitymatrix_kpm.get_dm_kpm_sparse"""
-    get_basis(h)
-    n = h.intra.shape[0]
-    vals = dm_entries(mesh_states(h,nk),needed,smearing(T))
-    return {d: csr_matrix((vals[d],(np.asarray(r),np.asarray(c))),
-        shape=(n,n),dtype=np.complex128) for d,(r,c) in needed.items()}
+class SparseBackend():
+    """The ultracell backend of the sparse engine of the spinful mean
+    field (scftk.spinspin._run_anisotropic_scf with integration=
+    "ultracell"): the density matrix at the entries the mean field reads,
+    as csr matrices, with the Fermi level that holds a filling, and the
+    band energy, from one diagonalization of the ultracell per kpoint and
+    iteration. It keeps the states of the last density matrix, for the
+    band energy of the same Hamiltonian"""
+    def __init__(self,nk=1,T=None):
+        self.nk = nk
+        self.T = 0. if T is None else T # of the Fermi search
+        self.delta = smearing(T) # of the occupations
+        self.release()
+    def release(self):
+        """Drop the states kept"""
+        self.states,self.h = None,None
+    def solve(self,h):
+        self.states,self.h = MeshStates(h,nk=self.nk),h
+        return self.states
+    def entries(self,needed):
+        n = self.states.n
+        vals = dm_entries(self.states,needed,self.delta)
+        return {d: csr_matrix((vals[d],(np.asarray(r),np.asarray(c))),
+            shape=(n,n),dtype=np.complex128)
+            for d,(r,c) in needed.items()}
+    def dm_with_fermi(self,h,needed,filling):
+        """The density matrix of h shifted by its Fermi level at filling,
+        and that level; the caller shifts h by it, as for
+        densitymatrix.full_dm_accumulate_sparse_with_fermi"""
+        states = self.solve(h)
+        fermi = fermi_level(states.eigenvalues(),states.n,filling,T=self.T)
+        states.shift = -fermi # the eigenvalues of the shifted h
+        return self.entries(needed),fermi
+    def dm(self,h,needed):
+        """The density matrix of h, already shifted by its chemical
+        potential"""
+        self.solve(h)
+        return self.entries(needed)
+    def band_energy(self,h):
+        """Sum of the eigenvalues of h below zero energy, the occupied
+        states at T=0, averaged over the mesh, as h.get_total_energy() for
+        "ed"; from the states of the last density matrix if it was of h"""
+        states = self.states if h is self.h else MeshStates(h,nk=self.nk)
+        return np.mean([np.sum(e[e<0.]) for e in states.eigenvalues()])
 
 
 def fermi_level(esk,n,filling,T=0.):
