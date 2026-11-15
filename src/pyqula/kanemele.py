@@ -18,27 +18,41 @@ _sy = np.asarray(sy.todense())
 _sz = np.asarray(sz.todense())
 
 
-def second_neighbor_cells(h,ncells,rcut=2.1):
-    """Return the cells, within ncells of the origin along each periodic
-    direction, holding a site closer than rcut to a site of the unit cell:
-    the cells a second neighbor of a site of the unit cell can sit in (the
-    first-neighbor distance is 1, and the generators below accept a
-    second-neighbor pair below a distance sqrt(4.1)). The origin comes
-    first. These are not the cells the Hamiltonian already has a hopping
-    to: a first-neighbor Hamiltonian of the diamond lattice has hoppings
-    to six cells, and the second neighbors sit in twelve."""
+def second_neighbor_cells(h,rcut=2.1):
+    """Return the cells holding a site closer than rcut to a site of the
+    unit cell: the cells a second neighbor of a site of the unit cell can
+    sit in (the first-neighbor distance is 1, and the generators below
+    accept a second-neighbor pair below a distance sqrt(4.1)). The origin
+    comes first. These are not the cells the Hamiltonian already has a
+    hopping to: a first-neighbor Hamiltonian of the diamond lattice has
+    hoppings to six cells, and the second neighbors sit in twelve.
+
+    The candidates are every cell within rcut (cells_within), with a range
+    per direction. A fixed box of cells (two cells, or 10/|a1| of them)
+    used to miss them on a sheared cell, a2' = a2 + n a1, where the second
+    neighbor a2 of the honeycomb lattice sits in the cell (-n,1)."""
     from .multicell import close_enough # check if two rs are close
+    from .specialhopping import cells_within
     g = h.geometry
-    dim = h.dimensionality
-    rng = list(range(-ncells,ncells+1)) # cells along one direction
+    if h.dimensionality==0: return [(0,0,0)]
     cells = [(0,0,0)] # the origin always holds second neighbors
-    for i in (rng if dim>0 else [0]):
-        for j in (rng if dim>1 else [0]):
-            for k in (rng if dim>2 else [0]):
-                if (i,j,k)==(0,0,0): continue # already there
-                r2 = [ri + i*g.a1 + j*g.a2 + k*g.a3 for ri in g.r]
-                if close_enough(g.r,r2,rcut=rcut): cells.append((i,j,k))
+    for (i,j,k) in cells_within(g,rcut):
+        if (i,j,k)==(0,0,0): continue # already there
+        r2 = [ri + i*g.a1 + j*g.a2 + k*g.a3 for ri in g.r]
+        if close_enough(g.r,r2,rcut=rcut): cells.append((i,j,k))
     return cells
+
+
+def second_neighbor_paths(h,cells):
+    """The positions of the sites of the cells, the candidates for the
+    intermediate site of a second-neighbor path, cell by cell in the
+    order of the old loops over the cells"""
+    g = h.geometry
+    if h.dimensionality==0: return g.r
+    rs = [] # all the cells
+    for d in sorted(cells):
+        rs += [ri + d[0]*g.a1 + d[1]*g.a2 + d[2]*g.a3 for ri in g.r]
+    return rs
 
 
 def _is_zero(m):
@@ -221,37 +235,12 @@ def add_kane_mele(self,t,**kwargs):
   g = self.geometry
   require_spin(self,"the Kane-Mele coupling")
   if self.is_multicell:   # multicell Hamiltonian
-    ncells = 2 # number of neighboring cells to check
-    if self.dimensionality==0: rs = g.r # fix for zero dimensional
-    elif self.dimensionality==1:  # three dimensional
-      rs = [] # all the cells
-      for i in range(-ncells,ncells+1): # loop over neighbouring cells
-        rtmp = [ri + i*g.a1 for ri in g.r] # new positions
-        if close_enough(g.r,rtmp,rcut=2.1): # if this positions are not too far
-          rs += rtmp
-    elif self.dimensionality==2:  # three dimensional
-      rs = [] # all the cells
-      for i in range(-ncells,ncells+1): # loop over neighbouring cells
-        for j in range(-ncells,ncells+1):
-          rtmp = [ri + i*g.a1 +j*g.a2 for ri in g.r] # new positions
-          if close_enough(g.r,rtmp,rcut=2.1): # if this positions are not too far
-            rs += rtmp
-    elif self.dimensionality==3:  # three dimensional
-      rs = [] # all the cells
-      for i in range(-ncells,ncells+1): # loop over neighbouring cells
-        for j in range(-ncells,ncells+1):
-          for k in range(-ncells,ncells+1):
-            rtmp = [ri + i*g.a1 +j*g.a2 + k*g.a3 for ri in g.r] # new positions
-            if close_enough(g.r,rtmp,rcut=2.1): # if this positions are not too far
-              rs += rtmp
-    else:
-      raise NotImplementedError("the Kane-Mele coupling is only implemented "
-              "up to 3d for multicell Hamiltonians")
-
     # every cell a second neighbor can sit in, not only the cells the
     # Hamiltonian already has a hopping to: a first-neighbor diamond
     # Hamiltonian has none towards six of the twelve second neighbors
-    for d in second_neighbor_cells(self,ncells): # loop over cells
+    cells = second_neighbor_cells(self) # cells within 2.1 of the cell
+    rs = second_neighbor_paths(self,cells) # intermediate sites
+    for d in cells: # loop over cells
       if d==(0,0,0): r2 = g.r # intracell
       else: r2 = [ri + d[0]*g.a1 + d[1]*g.a2 +d[2]*g.a3 for ri in g.r] # second vectors
       m = generalized_kane_mele(g.r,r2,rs,fun=t,**kwargs) # kane mele coupling
@@ -333,41 +322,10 @@ def add_haldane_like(self,t,spinless_generator,
 #     else: return m # spinless
   from .multicell import close_enough # check if two rs are close
   if self.is_multicell:   # multicell Hamiltonians
-    if self.dimensionality==0:  rs = g.r
-    else: # higher dimensional
-      ncells = self.geometry.get_ncells() # number of unit cells
-      if self.dimensionality==1:  # three dimensional
-        rs = [] # all the cells
-        for i in range(-ncells,ncells+1): # loop over neighbouring cells
-          rtmp = self.geometry.replicas(d=[i,0,0]) 
-          if close_enough(g.r,rtmp,rcut=2.1): # if these positions are not too far
-            rtmp = [ri for ri in rtmp]
-            rs += rtmp
-      elif self.dimensionality==2:  # three dimensional
-        rs = [] # all the cells
-        for i in range(-ncells,ncells+1): # loop over neighbouring cells
-          for j in range(-ncells,ncells+1):
-            rtmp = self.geometry.replicas(d=[i,j,0]) 
-            if close_enough(g.r,rtmp,rcut=2.1): # if this positions are not too far
-              rtmp = [ri for ri in rtmp]
-              rs += rtmp
-      elif self.dimensionality==3:  # three dimensional
-        rs = [] # all the cells
-        for i in range(-ncells,ncells+1): # loop over neighbouring cells
-          for j in range(-ncells,ncells+1):
-            for k in range(-ncells,ncells+1):
-              rtmp = self.geometry.replicas(d=[i,j,k]) 
-              if close_enough(g.r,rtmp,rcut=2.1): # if not too far
-                rtmp = [ri for ri in rtmp]
-                rs += rtmp
-      else:
-        raise NotImplementedError("the Haldane-like coupling is only "
-                "implemented up to 3d for multicell Hamiltonians")
-
     # every cell a second neighbor can sit in, not only the cells the
     # Hamiltonian already has a hopping to (see add_kane_mele)
-    ncells = 0 if self.dimensionality==0 else self.geometry.get_ncells()
-    dirs = second_neighbor_cells(self,ncells) # directions
+    dirs = second_neighbor_cells(self) # directions
+    rs = second_neighbor_paths(self,dirs) # intermediate sites
     def pfun(d): # function to parallelize
       r2 = self.geometry.replicas(d=d)
       return generator(g.r,r2,rs,fun=t,sublattice=sublattice)
