@@ -201,3 +201,19 @@ about 1, so the times are a ratio. Every result is the same as before:
 
 The optimization of the Kondo density-matrix entries, held on the branch
 `held/kondo-dm-entries`, was not timed.
+
+## Four notes checked after the repairs, 15 November 2026
+
+The report of the repairs left four notes open. Each was read and settled the same day.
+
+- `densitydensity_jax` and `vjinteraction_jax` clamped the number of occupied states to 1 to
+  n-1, so `filling=1` left one state of the mesh empty and `filling=0` filled one, 1/32 of the
+  charge on the 4x4 honeycomb mesh, and the derivative of mu was NaN at the two ends. Now both
+  hold full and empty filling, with the rule of `spectrum.get_fermi_energy_T`, against the numpy
+  engine at T=1e-2 (6c62fea).
+- `g.get_supercell(M)` took a matrix only when it was 3x3, and a 2x2 matrix on a 2D lattice failed
+  with a TypeError. Both paths now pad a $d\times d$ matrix through `supercell.padded_matrix`
+  (d0c01a5).
+- `reducef=` of `non_orthogonal_supercell` had no effect and is dropped with its four passes.
+  `spinwaves.set_couplings` and `xyj` had no caller and were broken, and they are deleted
+  (20d77c1, d0c01a5). The maintainer said that dead code can be removed.

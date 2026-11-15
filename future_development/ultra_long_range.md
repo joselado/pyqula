@@ -253,12 +253,30 @@ with the cut $|E|\le E_\mathrm{max}$ (decisions 2 and 6). A Fable agent designed
 code and from the TeX source of arXiv:2008.12573, and both were built the same day (ebaa136,
 f58bd25, b7572fa, f3e0c08), with the tests of `tests/ultracell/test_ultracell_window.py` and
 `test_ultracell_nambu.py`. A reviewer found one crash, a Nambu cut below the quasiparticle gap,
-repaired in f3e0c08; still not built: a shell filling for a gapless paired state, and the
-Hellmann-Feynman test of the design. The two are one
+repaired in f3e0c08. The window and the Nambu cut are one
 mechanism: each folded momentum gets an index range $[i_0,i_1)$ of its sorted levels, frozen
 below $i_0$, kept in between, dropped above. The Nambu cut is the window $(-E_\mathrm{max},
 E_\mathrm{max})$ on the BdG levels, and its deep states are the frozen density in the Nambu
 space.
+
+The Hellmann-Feynman test of the design came later the same day (f744b88,
+`tests/ultracell/test_ultracell_hellmann_feynman.py`). At a fixed $\mu$ the slope of the
+grand potential in the strength of the interaction is the band energy minus the grand
+potential. It holds to $2\times10^{-10}$ for a modulated honeycomb with $V_1$ and a window on
+the clean basis, and to $2\times10^{-7}$, the $\epsilon^2$ residue of the central difference,
+for a modulated chain with $U=-2t$, a pairing of 0.36 and every state kept. Halving the band
+energy of the frozen states breaks the first by 0.24, and doubling the pairing double counting
+of the sparse engine breaks the second by 1.7. With a cut and the rebuilt basis the kept
+states move with the interaction, so no such identity holds there, and the check is a table in
+`emax`. `examples/1d/ultracell_superconductor` gives one, and `examples/2d/ultracell_window`
+gives one for a window. On the chain with a slow potential of amplitude $0.4t$ (period 60,
+$U=-2t$, filling 0.3) the cut overestimates the modulation of the pairing, and it converges to
+the exact one from above as `emax` grows: 0.079 at `emax=1`, 0.047 at 2, 0.036 at 3, against
+0.032 with every state. With every state kept, the ultracell and "ed" on the supercell agree to
+$2\times10^{-9}$ at `maxerror=1e-11`. At the default tolerance they differ by $10^{-3}$, which
+is the distance at which each loop stops.
+
+Still not built: a shell filling for a gapless paired state.
 
 The paper has no frozen density and no window: Eq. (2) sums every band at the central k, and
 the runs keep the occupied states plus a number of empty ones, which is our `emax=`. In its
