@@ -476,13 +476,32 @@ def get_local_energy(LG,normalize=False):
     return out
 
 
+@jit(nopython=True,cache=True)
+def _row_sums_occupied_numba(ptr,idx,jarr,den):
+    """sum_k J_ik*den[k] over each site's neighbors with the site itself
+    taken as occupied: a pair (i,i) of the site with its own periodic
+    images gives J_ii, its energy J_ii*den_i**2 at den_i=1"""
+    n = len(ptr)-1
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            if idx[k]==i: row += jarr[k] # the site with its own images
+            else: row += jarr[k]*den[idx[k]]
+        out[i] = row
+    return out
+
+
 def get_local_mu(LG,normalize=False):
-    """Return the local chemical potential: the marginal energy cost
-    of occupying site ii, independent of its current occupation (mu_i
-    + sum_k J_ik*den_k) -- see get_local_energy's docstring for the
-    same O(n*n_pairs) -> O(n_pairs) rewrite"""
+    """Return the local chemical potential: the local energy of site ii
+    with site ii occupied and the others as they are, mu_i + J_ii +
+    sum_{k!=i} J_ik*den_k, so it does not depend on the occupation of
+    site ii itself. J_ii is the coupling of the site with its own
+    periodic images; it used to enter as J_ii*den_i, so the value changed
+    with den_i. See get_local_energy's docstring for the O(n*n_pairs) ->
+    O(n_pairs) rewrite"""
     ptr,idx,jarr = LG._get_adjacency()
-    row = _row_sums_den_numba(ptr,idx,jarr,LG.den)
+    row = _row_sums_occupied_numba(ptr,idx,jarr,LG.den)
     out = LG.mu + row
     if normalize: out = out/_row_sums_numba(ptr,jarr)
     return out

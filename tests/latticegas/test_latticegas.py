@@ -477,3 +477,19 @@ def test_grand_canonical_energy_with_self_image_pairs_does_not_drift():
             resync_every=0)
     recomputed = latticegas.energy_numba(lg.mu, lg.pairs, lg.j, lg.den)
     assert np.isclose(es[-1], recomputed, atol=1e-8)
+
+
+def test_local_mu_does_not_depend_on_the_occupation_of_the_site():
+    """get_local_mu is the local energy of site i with site i occupied,
+    so it must not change with den_i. The pair (i,i) of a site with its
+    own images entered as J_ii*den_i, and on the 2x2 triangular cell the
+    value changed by J_ii=1.2 when den_i went from 0 to 1"""
+    lg = _periodic_gas_with_self_images(seed=7)
+    for i in range(lg.nsites):
+        values = []
+        for occupation in (0., 1.):
+            lg.den[i] = occupation
+            values.append(lg.get_local_mu()[i])
+        assert abs(values[0] - values[1]) < 1e-12
+        # with the site occupied, it is the local energy of the site
+        assert abs(values[1] - lg.get_local_energy()[i]) < 1e-12
