@@ -30,7 +30,7 @@ from scipy.sparse import csr_matrix
 from numba import jit, prange
 
 from .basis import pad3
-from .matrix import ultracell_matrix, real_space_states
+from .matrix import ultracell_matrix, real_space_states, state_chunks
 
 # a state above the Fermi level by this many times the smearing has an
 # occupation below exp(-50), 2e-22, and is left out of the density matrix
@@ -95,20 +95,11 @@ class MeshStates():
         self.shift = 0. # added to every eigenvalue, see shifted()
     def eigenvalues(self):
         return [es + self.shift for es in self.es]
-    def real_space(self,ik,emax=None):
-        """Eigenvalues at kpoint ik and the eigenvectors on the supercell
-        orbitals, (norbs,nstates), only those up to emax if given"""
-        es = self.es[ik] + self.shift
-        vs = self.vs[ik]
-        if emax is not None:
-            keep = es<=emax ; es,vs = es[keep],vs[:,keep]
-        valid = self.valid[ik]
-        N,bmax = valid.shape
-        C = np.zeros((N*bmax,len(es)),dtype=np.complex128)
-        C[valid.ravel()] = vs
-        C = C.reshape(N,bmax,len(es))
-        Phi = real_space_states(self.basis,self.ks[ik],C,self.Us[ik])
-        return es,np.ascontiguousarray(Phi)
+    def real_space(self,ik,vs):
+        """The eigenvectors vs of kpoint ik, columns of self.vs[ik], on
+        the supercell orbitals, (norbs,nstates)"""
+        return np.ascontiguousarray(real_space_states(self.basis,self.ks[ik],
+            vs,self.Us[ik],self.valid[ik]))
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -134,10 +125,14 @@ def smearing(T):
 
 
 def occupied(states,ik,delta):
-    """Eigenvalues, Fermi-Dirac occupations and eigenvectors on the
-    supercell orbitals of the occupied states at kpoint ik"""
-    es,Phi = states.real_space(ik,emax=empty_ratio*delta)
-    return es,1./(1.+np.exp(es/delta)),Phi
+    """The Fermi-Dirac occupations and the eigenvectors on the supercell
+    orbitals of the occupied states at kpoint ik, a chunk of states at a
+    time, so that the real-space states never take more than a chunk"""
+    es = states.es[ik] + states.shift
+    keep = es<=empty_ratio*delta
+    occ,vs = 1./(1.+np.exp(es[keep]/delta)),states.vs[ik][:,keep]
+    for sl in state_chunks(states.basis,len(occ)):
+        yield occ[sl],states.real_space(ik,vs[:,sl])
 
 
 def dm_entries(states,needed,delta):
@@ -155,8 +150,9 @@ def dm_entries(states,needed,delta):
     where = {d: np.searchsorted(union,kd) for d,kd in keys.items()}
     vals = {d: np.zeros(len(kd),dtype=np.complex128) for d,kd in keys.items()}
     for ik,k in enumerate(states.ks):
-        es,occ,Phi = occupied(states,ik,delta)
-        s = pair_sums(Phi,occ,ur,uc)
+        s = np.zeros(len(union),dtype=np.complex128)
+        for occ,Phi in occupied(states,ik,delta):
+            s = s + pair_sums(Phi,occ,ur,uc)
         for d in vals:
             vals[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*s[where[d]]
     for d in vals: vals[d] /= len(states.ks)
@@ -169,8 +165,9 @@ def dm_full(states,ds,delta):
     n = states.n
     out = {d: np.zeros((n,n),dtype=np.complex128) for d in ds}
     for ik,k in enumerate(states.ks):
-        es,occ,Phi = occupied(states,ik,delta)
-        M = (np.conjugate(Phi)*occ[None,:])@Phi.T
+        M = np.zeros((n,n),dtype=np.complex128)
+        for occ,Phi in occupied(states,ik,delta):
+            M = M + (np.conjugate(Phi)*occ[None,:])@Phi.T
         for d in ds: out[d] += np.exp(2j*np.pi*np.dot(k,pad3(d)))*M
     for d in out: out[d] /= len(states.ks)
     return out

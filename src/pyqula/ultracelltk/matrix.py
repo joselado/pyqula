@@ -18,37 +18,39 @@ separate projections.
 import numpy as np
 from scipy.linalg import eigh
 
+# the states are taken to the supercell orbitals in chunks of about this
+# many entries, so that the memory of the real-space states stays bounded
+chunk_entries = 2**23
+
 
 def ultracell_matrix(basis,hk,kS,E,U,valid):
-    """The ultracell matrix at kS, restricted to the kept states, from the
-    supercell Bloch Hamiltonian hk = H_S(k_S) and the states of
-    basis.states(kS)"""
+    """The ultracell matrix at kS, on the kept states in the order of
+    valid.ravel() (folded momentum first, then level), from the supercell
+    Bloch Hamiltonian hk = H_S(k_S) and the states of basis.states(kS)"""
     N,bmax = valid.shape
-    H = np.zeros((N*bmax,N*bmax),dtype=np.complex128)
+    counts = np.sum(valid,axis=1) # kept at each momentum, the first ones
+    offsets = np.concatenate([[0],np.cumsum(counts)])
+    rows = valid.ravel()
+    H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128)
     for iq in range(N): # column block of the folded momentum q'
-        if not np.any(valid[iq]): continue
-        B = basis.basis_block(kS,U,iq) # (norbs,bmax)
+        b = counts[iq]
+        if b==0: continue
+        B = basis.basis_block(kS,U,iq)[:,0:b] # (norbs,b)
         Y = np.asarray(hk@B) # H_S applied to the basis vectors of q'
-        Yq = basis.from_supercell(kS,Y) # (N,norb,bmax), components at every q
+        Yq = basis.from_supercell(kS,Y) # (N,norb,b), components at every q
         blocks = np.einsum("qam,qan->qmn",np.conjugate(U),Yq) # U_q^dag Y_q
-        H[:,iq*bmax:(iq+1)*bmax] = blocks.reshape(N*bmax,bmax)
-    v = valid.ravel()
-    H = H[np.ix_(v,v)]
+        H[:,offsets[iq]:offsets[iq+1]] = blocks.reshape(N*bmax,b)[rows]
     return 0.5*(H + np.conjugate(H.T)) # Hermitian up to rounding
 
 
 def eigenstates(basis,hk,kS):
     """Eigenvalues and eigenvectors of the ultracell at kS. The vectors are
-    returned padded, (N,bmax,nstates), as coefficients c_{q,m} of the
-    folded Bloch states, together with the unit-cell vectors U of
-    basis.states, so that phi_q = U_q c_q"""
+    the coefficients of the kept states, (nkept,nstates) in the order of
+    valid.ravel(), returned with the unit-cell vectors U and the mask
+    valid of basis.states, so that phi_q = U_q c_q"""
     E,U,valid = basis.states(kS)
-    H = ultracell_matrix(basis,hk,kS,E,U,valid)
-    es,vs = eigh(H)
-    N,bmax = valid.shape
-    C = np.zeros((N*bmax,len(es)),dtype=np.complex128)
-    C[valid.ravel()] = vs
-    return es,C.reshape(N,bmax,len(es)),U
+    es,vs = eigh(ultracell_matrix(basis,hk,kS,E,U,valid))
+    return es,vs,U,valid
 
 
 def eigenvalues(basis,hk,kS):
@@ -57,8 +59,19 @@ def eigenvalues(basis,hk,kS):
     return eigh(ultracell_matrix(basis,hk,kS,E,U,valid),eigvals_only=True)
 
 
-def real_space_states(basis,kS,C,U):
-    """The eigenvectors on the orbitals of the supercell, (norbs,nstates),
-    one FFT over the folded momenta per state"""
-    phi = np.einsum("qam,qmj->qaj",U,C) # components per folded momentum
+def real_space_states(basis,kS,vs,U,valid):
+    """The eigenvectors vs (nkept,nstates) on the orbitals of the
+    supercell, (norbs,nstates), one FFT over the folded momenta per state"""
+    N,bmax = valid.shape
+    C = np.zeros((N*bmax,vs.shape[1]),dtype=np.complex128)
+    C[valid.ravel()] = vs
+    phi = np.einsum("qam,qmj->qaj",U,C.reshape(N,bmax,vs.shape[1]))
     return basis.to_supercell(kS,phi)
+
+
+def state_chunks(basis,nstates):
+    """Slices of the nstates states, chunk_entries/norbs states each, at
+    least one"""
+    norbs = basis.N*basis.norb
+    size = max(1,chunk_entries//norbs)
+    return [slice(i,min(i+size,nstates)) for i in range(0,nstates,size)]

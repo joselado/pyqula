@@ -15,7 +15,7 @@ import numpy as np
 from .. import filewrite
 from ..dostk.eigtodos import calculate_dos
 from .basis import pad3
-from .matrix import eigenstates, eigenvalues, real_space_states
+from .matrix import eigenstates, eigenvalues, real_space_states, state_chunks
 
 
 def check_nk(nk):
@@ -50,8 +50,9 @@ def kdos_bands(u,kpath=None,energies=np.linspace(-3.0,3.0,200),delta=0.01,
     out = []
     for p in kpath:
         kS = pad3(p)*u.basis.n # so that the folded momentum q=0 is p itself
-        es,C,U = eigenstates(u.basis,u.hk(kS),kS)
-        w = np.sum(np.abs(C[0])**2,axis=0) # weight on q=0
+        es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
+        b0 = np.sum(valid[0]) # the kept states of q=0 come first
+        w = np.sum(np.abs(vs[0:b0])**2,axis=0) # weight on q=0
         ys = calculate_dos(es,energies,delta,w=w)/np.pi
         out.append((energies,ys))
     return write_kdos_bands(kpath,out,write=write)
@@ -81,14 +82,22 @@ def dos(u,energies=np.linspace(-4.0,4.0,400),delta=None,nk=10,write=None):
     return (energies,ys)
 
 
-def site_weights(u,kS,operator=None):
-    """Eigenvalues at kS and the weight of every eigenstate on every orbital
-    of the supercell, |Phi(a)|^2, or Re[conj(Phi(a)) (O Phi)(a)] with an
-    operator matrix O, (norbs,nstates)"""
-    es,C,U = eigenstates(u.basis,u.hk(kS),kS)
-    Phi = real_space_states(u.basis,kS,C,U)
-    if operator is None: return es,np.abs(Phi)**2
-    return es,np.real(np.conjugate(Phi)*np.asarray(operator@Phi))
+def site_sum(u,kS,weight,operator=None):
+    """sum_s weight(e_s) |Phi_s(a)|^2 on every orbital a of the supercell,
+    or with Re[conj(Phi_s(a)) (O Phi_s)(a)] for an operator matrix O, over
+    the eigenstates at kS whose weight is not zero, a chunk of states at a
+    time"""
+    es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
+    w = weight(es)
+    keep = w!=0.
+    w,vs = w[keep],vs[:,keep]
+    out = np.zeros(u.hs.intra.shape[0])
+    for sl in state_chunks(u.basis,len(w)):
+        Phi = real_space_states(u.basis,kS,vs[:,sl],U,valid)
+        if operator is None: w2 = np.abs(Phi)**2
+        else: w2 = np.real(np.conjugate(Phi)*np.asarray(operator@Phi))
+        out += w2@w[sl]
+    return out
 
 
 def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
@@ -103,10 +112,8 @@ def ldos(u,e=0.0,delta=0.001,nk=10,write=None):
     check_delta(delta)
     ks = ultracell_kmesh(u,nk)
     d = 0.
-    for k in ks:
-        es,w2 = site_weights(u,k)
-        lor = delta/((e-es)**2 + delta**2)/np.pi # one Lorentzian per state
-        d = d + w2@lor
+    def lor(es): return delta/((e-es)**2 + delta**2)/np.pi # per state
+    for k in ks: d = d + site_sum(u,k,lor)
     d = full2profile(u.hs,d/len(ks)) # sum the orbitals of each site
     g = u.hs.geometry
     if write: write_ldos(g.x,g.y,d)
@@ -138,9 +145,8 @@ def vev(u,operator=None,nk=10):
                     "action on a state or depending on k")
     ks = ultracell_kmesh(u,nk)
     d = 0.
-    for k in ks:
-        es,w2 = site_weights(u,k,operator=op)
-        d = d + np.sum(w2[:,es<0.],axis=1)
+    def occupied(es): return (es<0.).astype(float)
+    for k in ks: d = d + site_sum(u,k,occupied,operator=op)
     return full2profile(u.hs,d/len(ks)).real
 
 

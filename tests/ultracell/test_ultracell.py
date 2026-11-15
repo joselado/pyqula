@@ -204,10 +204,9 @@ def test_cut_states_in_real_space_are_the_rayleigh_ritz_states():
     h,hs = modulated_honeycomb((4,3))
     u = h.get_ultracell(hs,emax=0.8)
     kS = np.array([0.31,0.17,0.])
-    es,C,U = eigenstates(u.basis,u.hk(kS),kS)
-    _,_,valid = u.basis.states(kS)
+    es,vs,U,valid = eigenstates(u.basis,u.hk(kS),kS)
     assert len(set(np.sum(valid,axis=1)))>1 # the blocks differ in size
-    Phi = real_space_states(u.basis,kS,C,U)
+    Phi = real_space_states(u.basis,kS,vs,U,valid)
     HS = dense(hs.get_hk_gen()(kS))
     assert np.max(np.abs(Phi.conj().T@Phi-np.identity(len(es))))<1e-10
     assert np.max(np.abs(np.real(np.sum(Phi.conj()*(HS@Phi),axis=0))-es))<1e-10
@@ -330,3 +329,26 @@ def test_wrong_inputs_raise():
     gs = g.get_supercell([[1,1,0],[-1,1,0],[0,0,1]]) # rotated supercell
     with pytest.raises(NotImplementedError):
         h.get_ultracell(gs.get_hamiltonian())
+
+
+def test_states_in_chunks_give_the_same_observables(monkeypatch):
+    """The states go to the supercell orbitals a chunk at a time, to bound
+    the memory; with chunks of a few states the local density of states,
+    the expectation values and the density matrix must not change"""
+    from pyqula.ultracelltk import matrix
+    from pyqula.ultracelltk.meanfield import MeshStates, dm_full
+    h,hs = modulated_honeycomb((3,2))
+    u = h.get_ultracell(hs,emax=1.0)
+    def compute():
+        hm = u.hs.copy()
+        hm.ultracell_basis = u.basis
+        return (u.get_ldos(e=0.3,delta=0.05,nk=2,write=False)[2],
+                u.get_vev(operator="sz",nk=2),
+                dm_full(MeshStates(hm,nk=2),[(0,0,0),(1,0,0)],1e-7))
+    l1,v1,d1 = compute()
+    monkeypatch.setattr(matrix,"chunk_entries",3*hs.intra.shape[0])
+    assert len(matrix.state_chunks(u.basis,10))==4 # chunks of 3 states
+    l2,v2,d2 = compute()
+    assert np.max(np.abs(l1-l2))<1e-12
+    assert np.max(np.abs(v1-v2))<1e-12
+    for d in d1: assert np.max(np.abs(d1[d]-d2[d]))<1e-12
