@@ -422,3 +422,58 @@ def test_constructor_leaves_the_callers_geometry_alone():
     before = set(vars(g))
     latticegas.LatticeGas(g)
     assert set(vars(g)) == before
+
+
+def _periodic_gas_with_self_images(seed=0, filling=0.5):
+    """A periodic 2x2 cell of the triangular lattice with three shells.
+    The third shell, at distance 2, is a lattice vector of the cell, so
+    every site is coupled to its own six images: pairs (i,i) in the folded
+    couplings, next to the bonds between different sites"""
+    np.random.seed(seed)
+    g = geometry.triangular_lattice().get_supercell(2) # 4 sites
+    lg = latticegas.LatticeGas(g, filling=filling)
+    lg.mu = np.random.uniform(-1., 1., lg.nsites)
+    lg.add_interaction(Jij=[1., 0.5, 0.2])
+    diag = (lg.pairs[:, 0] == lg.pairs[:, 1]) & (np.abs(lg.j) > 1e-8)
+    assert np.any(diag) # the pairs of a site with its own images are there
+    return lg
+
+
+def test_moves_with_self_image_pairs_match_brute_force_recompute():
+    """A pair (i,i) is one term J_ii*den_i**2 of the energy. The
+    incremental energies counted it as a bond of i with a neighbor, so
+    occupying an empty site missed its J_ii and a swap was off by J_ii
+    of the two sites"""
+    lg = _periodic_gas_with_self_images(seed=4)
+    # pairs (i,i) that differ between sites, so that a swap sees J_ii-J_jj
+    lg.pairs = np.concatenate([lg.pairs, [[0, 0], [1, 1]]])
+    lg.j = np.concatenate([lg.j, [0.7, -0.4]])
+    lg._adjacency = None
+    n = lg.nsites
+    ptr, idx, jarr = lg._get_adjacency()
+    for _ in range(100):
+        den = latticegas.random_density(n, np.random.randint(1, n))
+        e0 = latticegas.energy_numba(lg.mu, lg.pairs, lg.j, den)
+        i = np.random.randint(0, n)
+        den2 = den.copy()
+        den2[i] = 1. - den2[i]
+        e2 = latticegas.energy_numba(lg.mu, lg.pairs, lg.j, den2)
+        delta = latticegas.flip_delta_energy(lg.mu, ptr, idx, jarr, den, i)
+        assert np.isclose(e2 - e0, delta, atol=1e-10)
+        i1, i2 = np.random.choice(n, 2, replace=False)
+        den3 = den.copy()
+        den3[i1], den3[i2] = den3[i2], den3[i1]
+        e3 = latticegas.energy_numba(lg.mu, lg.pairs, lg.j, den3)
+        delta = latticegas.swap_delta_energy(lg.mu, ptr, idx, jarr, den, i1, i2)
+        assert np.isclose(e3 - e0, delta, atol=1e-10)
+
+
+def test_grand_canonical_energy_with_self_image_pairs_does_not_drift():
+    """Without a resync the energy tracked by the grand-canonical loop
+    must be the energy of the final state, also with pairs (i,i)"""
+    lg = _periodic_gas_with_self_images(seed=6)
+    np.random.seed(6)
+    es, ns = lg.optimize_grand_canonical(temp=1.0, ntries=2000,
+            resync_every=0)
+    recomputed = latticegas.energy_numba(lg.mu, lg.pairs, lg.j, lg.den)
+    assert np.isclose(es[-1], recomputed, atol=1e-8)

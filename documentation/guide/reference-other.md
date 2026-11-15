@@ -506,7 +506,7 @@ Sets `li.s` to the best configuration, and returns its energy
 ### li.get_local_energy() / li.get_local_field()
 `get_local_energy()` gives the energy of each site; the values add up to
 `li.get_energy()`. `get_local_field()` gives the effective field on each
-site, $h^{\mathrm{eff}}_i=b_i+2\sum_k J_{ik}s_k$, so that flipping $s_i$
+site, $h^{\mathrm{eff}}_i=b_i+2\sum_{k\neq i} J_{ik}s_k$, so that flipping $s_i$
 costs exactly $2s_ih^{\mathrm{eff}}_i$.
 
 Returns an array over sites

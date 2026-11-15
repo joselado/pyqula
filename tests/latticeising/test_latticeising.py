@@ -329,3 +329,56 @@ def test_constructor_leaves_the_callers_geometry_alone():
     before = set(vars(g))
     latticeising.LatticeIsing(g)
     assert set(vars(g)) == before
+
+
+def _periodic_ising_with_self_images(seed=0):
+    """A periodic 2x2 cell of the triangular lattice with three shells.
+    The third shell, at distance 2, is a lattice vector of the cell, so
+    every site is coupled to its own six images: pairs (i,i) in the folded
+    couplings, next to the bonds between different sites"""
+    np.random.seed(seed)
+    g = geometry.triangular_lattice().get_supercell(2) # 4 sites
+    li = latticeising.LatticeIsing(g)
+    li.b = np.random.uniform(-1., 1., li.nsites)
+    li.add_interaction(Jij=[1., 0.5, 0.2])
+    diag = (li.pairs[:, 0] == li.pairs[:, 1]) & (np.abs(li.j) > 1e-8)
+    assert np.any(diag) # the pairs of a site with its own images are there
+    return li
+
+
+def test_moves_with_self_image_pairs_match_brute_force_recompute():
+    """A pair (i,i) has the energy -J_ii*s_i**2 = -J_ii, which no flip and
+    no swap changes. The incremental energies counted it as a bond of i
+    with a neighbor, so on this cell every flip was charged 4*J_ii too
+    much, and the local field had a spurious 2*J_ii*s_i"""
+    li = _periodic_ising_with_self_images(seed=4)
+    n = li.nsites
+    ptr, idx, jarr = li._get_adjacency()
+    for _ in range(100):
+        s = latticeising.random_spins(n, np.random.randint(1, n))
+        e0 = latticeising.ising_energy_numba(li.b, li.pairs, li.j, s)
+        i = np.random.randint(0, n)
+        s2 = s.copy()
+        s2[i] = -s2[i]
+        e2 = latticeising.ising_energy_numba(li.b, li.pairs, li.j, s2)
+        delta = latticeising.flip_delta_energy_ising(li.b, ptr, idx, jarr, s, i)
+        assert np.isclose(e2 - e0, delta, atol=1e-10)
+        li.s = s
+        field = li.get_local_field()
+        assert np.isclose(delta, 2. * s[i] * field[i], atol=1e-10)
+        i1, i2 = np.random.choice(n, 2, replace=False)
+        s3 = s.copy()
+        s3[i1], s3[i2] = s3[i2], s3[i1]
+        e3 = latticeising.ising_energy_numba(li.b, li.pairs, li.j, s3)
+        delta = latticeising.swap_delta_energy_ising(li.b, ptr, idx, jarr, s, i1, i2)
+        assert np.isclose(e3 - e0, delta, atol=1e-10)
+
+
+def test_running_energy_with_self_image_pairs_does_not_drift():
+    """Without a resync the energy tracked by the Metropolis loop must be
+    the energy of the final state, also with pairs (i,i)"""
+    li = _periodic_ising_with_self_images(seed=6)
+    np.random.seed(6)
+    es, ms = li.optimize_energy(temp=1.0, ntries=2000, resync_every=0)
+    recomputed = latticeising.ising_energy_numba(li.b, li.pairs, li.j, li.s)
+    assert np.isclose(es[-1], recomputed, atol=1e-8)

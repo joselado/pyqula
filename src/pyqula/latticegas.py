@@ -222,12 +222,26 @@ def _build_adjacency(n,pairs,js):
 
 @jit(nopython=True,cache=True)
 def _row_sum_excluding(ptr,idx,jarr,den,i,exclude):
-    """sum_k J_{i,k}*den[k] over site i's neighbors, skipping `exclude`"""
+    """sum_k J_{i,k}*den[k] over site i's neighbors, skipping `exclude`
+    and i itself. A pair (i,i) is a site coupled to its own periodic
+    images (a coupling that reaches a lattice vector of the cell), and its
+    energy J_ii*den[i]**2 depends on den[i] alone, so a move changes it in
+    another way than a bond to a neighbor (see _self_coupling)"""
     s = 0.
     for k in range(ptr[i],ptr[i+1]):
         neighbor = idx[k]
-        if neighbor!=exclude:
+        if neighbor!=exclude and neighbor!=i:
             s += jarr[k]*den[neighbor]
+    return s
+
+
+@jit(nopython=True,cache=True)
+def _self_coupling(ptr,idx,jarr,i):
+    """sum of J_ii over the pairs (i,i) of site i, the coupling of the
+    site with its own periodic images"""
+    s = 0.
+    for k in range(ptr[i],ptr[i+1]):
+        if idx[k]==i: s += jarr[k]
     return s
 
 
@@ -238,12 +252,17 @@ def swap_delta_energy(mu,ptr,idx,jarr,den,i1,i2):
     but costs O(degree(i1)+degree(i2)) instead of O(n_pairs): the direct
     i1-i2 edge (if any) cancels exactly under a swap since its
     contribution only depends on the product den[i1]*den[i2], which a
-    swap leaves unchanged, so it is excluded from both row sums below"""
+    swap leaves unchanged, so it is excluded from both row sums below.
+    A pair (i1,i1) of a site with its own images is one term
+    J_11*den[i1]**2, not two, and it goes from J_11*a**2 to J_11*b**2"""
     a = den[i1] ; b = den[i2]
     if a==b: return 0. # nothing changes
     sum1 = _row_sum_excluding(ptr,idx,jarr,den,i1,i2)
     sum2 = _row_sum_excluding(ptr,idx,jarr,den,i2,i1)
-    return (mu[i1]-mu[i2])*(b-a) + 2.*(b-a)*(sum1-sum2)
+    self1 = _self_coupling(ptr,idx,jarr,i1) # site with its own images
+    self2 = _self_coupling(ptr,idx,jarr,i2)
+    return ((mu[i1]-mu[i2])*(b-a) + 2.*(b-a)*(sum1-sum2)
+            + (self1-self2)*(b*b-a*a))
 
 
 @jit(nopython=True,cache=True)
@@ -257,12 +276,14 @@ def flip_delta_energy(mu,ptr,idx,jarr,den,i):
     that convention: row already sums J_{i,k}*den[k] once per
     neighbor (single direction, via ptr[i]), and by the symmetric
     pairs guarantee that equals the "other direction" contribution
-    too, hence the factor 2"""
+    too, hence the factor 2. A pair (i,i) of the site with its own
+    images is one term J_ii*den[i]**2, which changes by J_ii*delta_n"""
     delta_n = 1.-2.*den[i] # +1 if turning on, -1 if turning off
-    row = 0.
+    row = 0. ; jself = 0.
     for k in range(ptr[i],ptr[i+1]):
-        row += jarr[k]*den[idx[k]]
-    return mu[i]*delta_n + 2.*row*delta_n
+        if idx[k]==i: jself += jarr[k] # the site with its own images
+        else: row += jarr[k]*den[idx[k]]
+    return mu[i]*delta_n + 2.*row*delta_n + jself*delta_n
 
 
 def _normalize_checkpoint_steps(checkpoint_at):

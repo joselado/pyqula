@@ -233,10 +233,12 @@ def flip_delta_energy_ising(b,ptr,idx,jarr,s,i):
     grand-canonical-like move complementing swap_delta_energy_ising
     (magnetization is not conserved). Equal to
     2*s[i]*get_local_field()[i] -- see that function's docstring for
-    the derivation"""
+    the derivation. A pair (i,i) of the site with its own periodic
+    images is -J_ii*s[i]**2 = -J_ii, which no flip changes, so it is
+    left out of the row sum"""
     row = 0.
     for k in range(ptr[i],ptr[i+1]):
-        row += jarr[k]*s[idx[k]]
+        if idx[k]!=i: row += jarr[k]*s[idx[k]]
     return 2.*b[i]*s[i] + 4.*s[i]*row
 
 
@@ -247,7 +249,8 @@ def swap_delta_energy_ising(b,ptr,idx,jarr,s,i1,i2):
     values). The direct i1-i2 bond's contribution depends only on
     s[i1]*s[i2], which a simultaneous double-flip leaves invariant, so
     (as in latticegas.swap_delta_energy) it is excluded from both row
-    sums below"""
+    sums below, and so is a pair (i,i) of a site with its own images,
+    -J_ii*s[i]**2, which does not change either"""
     a = s[i1] ; b_ = s[i2]
     if a==b_: return 0. # nothing changes
     row1 = _row_sum_excluding(ptr,idx,jarr,s,i1,i2)
@@ -414,7 +417,7 @@ def _local_field_numba(b,ptr,idx,jarr,s):
     for i in range(n):
         row = 0.
         for k in range(ptr[i],ptr[i+1]):
-            row += jarr[k]*s[idx[k]]
+            if idx[k]!=i: row += jarr[k]*s[idx[k]] # not the own images
         out[i] = b[i] + 2.*row
     return out
 
@@ -425,6 +428,8 @@ def get_local_field(LI):
     exactly 2*s_i*h_eff_i (the factor of 2 in front of the sum, unlike
     the factor of 1 you might naively expect, comes from pairs listing
     both (i,k) and (k,i) -- same double-counting convention as
-    get_energy())"""
+    get_energy()). The sum is over k != i: the coupling of a site with
+    its own periodic images is -J_ii*s_i**2, a constant, and gives no
+    field"""
     ptr,idx,jarr = LI._get_adjacency()
     return _local_field_numba(LI.b,ptr,idx,jarr,LI.s)
