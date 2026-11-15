@@ -100,3 +100,26 @@ a timing before anything changes.
 - `meanfield.py:495` coulomb_interaction and fast_coulomb_interaction set g.ncells = max(int(2*rcut/|a1|),1) on the caller's geometry, which is a box set only by a1 that also mutates the geometry. They also call g.replicas(d) positionally, but Geometry.replicas takes keywords only, so both raise TypeError at the first cell. meanfield.coulomb_interaction(geometry.honeycomb_lattice()) raises TypeError from replicas(d). The only caller, scftypes.scfclass.setup_interaction(mode='Coulomb'), is never called in src/ (its call sites are commented out).
 - `kanemele.py:377` add_kane_mele_old keeps a box of ncells=4 and adds Kane-Mele only to the hoppings that already exist, the bug that add_kane_mele fixed long ago. A first-neighbor diamond Hamiltonian with add_kane_mele_old misses the second neighbors in the six cells it has no hopping to.
 - `sctk/fastdeltaud.py:23` hopping2deltaud builds each pairing block with a Python double loop over n x n site pairs, dense t matrices and an n x n bmat of blocks, so it is O(n^2) per direction although the docstring says it can be fast for very large systems. For a 2000-site cell this is 4e6 Python iterations and a 2000 x 2000 Python list of blocks per lattice direction. A coo construction from np.nonzero of (|mud|>=1e-6)|(|mdu|>=1e-6) gives the same values.
+
+## Decisions of the maintainer, 15 November 2026
+
+- `h.get_supercell(M)` with a $d\times d$ matrix on a $d$-dimensional lattice is padded to 3x3,
+  with 1 along the missing directions.
+- `ncut=` with a matrix supercell is refused with a message saying it has no meaning there.
+- An `emax` that keeps no state at the folded momenta of one kS gives zero states there, not an
+  error.
+- The KPM-only keywords (`npol`, `scale`, `ne`, `cores`, `kpm_prec`, `kpm_radius`) raise a
+  TypeError with `integration="ed"` or `"ultracell"`, as they do with `use_jax=True`.
+- A coupling of the classical models given as a function drops the pair of a site with itself,
+  $J(\mathbf r_i,\mathbf r_i)$; the pair of a site with its own images stays.
+- The Kondo-lattice total energy is the grand potential at the smearing T.
+- `conductivity.optical_conductivity` takes keyword-only arguments after `ws`.
+- `add_kane_mele` and `add_haldane` average the orientation over every common neighbor of a
+  second-neighbor bond: one path on the honeycomb and the kagome lattices as now, zero on the
+  triangular lattice.
+- `meanfield.coulomb_interaction`, `fast_coulomb_interaction` and `kanemele.add_kane_mele_old`
+  are deleted.
+- At T=0 the KPM optical conductivity integrates the occupation box analytically over the
+  Chebyshev series, so that any frequency works.
+- Every other finding of this record is repaired with a test, bugs first, then the
+  optimizations with a timing each.

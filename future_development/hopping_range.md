@@ -121,3 +121,8 @@ The test that would fail today and pass after: the triangular and the chain rows
 a function against the list of the same shells, and a generator `NNG` against the list.
 Recommendation: the first option, with the whole suite run after it, since `get_hamiltonian`
 with a function is behind most model builders.
+
+Decided by the maintainer on 15 November 2026, after the repair: `rcut` becomes a hard cut, every
+pair of sites farther than `rcut` is zero, so the range is exact and no shell is kept in part; a
+longer tail needs `rcut=` by hand. Since `rcut` is then a distance on pairs, the same kind of
+range as a list of shells, `rcut=` with `tij=[t1,t2,...]` raises a TypeError.

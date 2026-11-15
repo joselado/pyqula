@@ -519,8 +519,9 @@ Each comes with a recommendation; they are handed over one at a time.
    frozen density; or `window=(emin,emax)`, which pays off for a wide multi-orbital model
    but makes the states below `emin` a frozen, lattice-periodic density that does not
    respond to the modulation. Stage 1 took the recommended default, `emax=`, with the
-   maintainer's go-ahead to use the recommendations and report them; `window=` is still
-   open for stage 2.
+   maintainer's go-ahead to use the recommendations and report them. Decided by the
+   maintainer on 15 November 2026: `window=(emin,emax)` is added, with the states below
+   `emin` frozen as a lattice-periodic density.
 3. The normalization of the unfolded spectral function: per unit cell, so that zero
    modulation gives the unit cell's own `get_kdos_bands()`, or the convention of
    `operator="unfold"`, $N$ times larger. Stage 1 took per unit cell, the recommended
@@ -539,7 +540,9 @@ Each comes with a recommendation; they are handed over one at a time.
    ultracell is the supercell in another basis and buys nothing over "ed". Recommendation
    of the Fable agent on 15 November 2026: leave Nambu until decision 2 is taken. The sparse
    engine already takes Nambu, so what would remain is the Fermi level of the paired state
-   (`superscf.BdGFermiLevel`) and the band energy of a BdG Hamiltonian.
+   (`superscf.BdGFermiLevel`) and the band energy of a BdG Hamiltonian. Decided by the
+   maintainer on 15 November 2026, together with `window=`: the ultracell mean field takes
+   Nambu Hamiltonians, with the cut $|E|\le E_\mathrm{max}$.
 7. The constraint $\int\mathbf m_{\mathbf Q=0}=0$ of the paper. It is a zero net moment
    and not specific to the ultracell. The recommended form is a named constraint of
    `scftk/mfconstrains.py`, for instance `"no_net_moment"` in `constrains=`, which removes
@@ -548,5 +551,5 @@ Each comes with a recommendation; they are handed over one at a time.
    uniform moment itself, and the two agree only for a uniform $U$ and in linear response.
    The exact form is a Lagrange field co-converged with the loop, one more unknown of the
    kind that caused trouble in the Kondo-lattice loop. No case is known yet where the loop
-   falls to the ferromagnet without it, so there is no test that could fail; left for the
-   maintainer, with that recommendation.
+   falls to the ferromagnet without it, so there is no test that could fail. Decided by the
+   maintainer on 15 November 2026: the named constraint, `constrains=["no_net_moment"]`.
