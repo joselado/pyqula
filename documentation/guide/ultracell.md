@@ -309,6 +309,8 @@ The keywords that change the result:
 
 - `U`, `V1`, `V2`, `V3`, `filling`, `mf`, `T`, `mix` and `maxerror`: as in
   `h.get_mean_field_hamiltonian()`, for a normal-state Hamiltonian
+- `J1`, `J2`, `J3` and `Jr`: the spin-spin exchange, as in
+  `h.get_mean_field_hamiltonian()`, for a spinful Hamiltonian
 - `nk=1`: the k-mesh of the ultracell, one number for every direction or
   one per direction
 - `return_total_energy=False`: also return the total energy of the
@@ -319,5 +321,4 @@ The keywords that change the result:
   $U=3t$ cut at `emax=0.5`, they left the moment 0.41 off, and the rebuilt
   basis 0.004 off
 
-The spin-spin exchange (`J1`, `J2`, `J3`, `Jr`) and the superconducting mean
-fields are not available on the ultracell.
+The superconducting mean fields are not available on the ultracell.

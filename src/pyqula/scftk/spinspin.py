@@ -382,6 +382,13 @@ _T_UNSET = object()
 # engine at its own 2000, and maxite=None (no limit) must stay reachable
 _MAXITE_UNSET = object()
 
+# the density-matrix backends of the numpy engine, integration=, and those
+# that run on the sparse engine (scftk/sparsemeanfield.py) when h is sparse:
+# exact diagonalization, the Chebyshev expansion, and the folded Bloch
+# states of an ultracell (ultracelltk/meanfield.py)
+_INTEGRATIONS = ("ed", "kpm", "ultracell")
+_SPARSE_ENGINE = ("kpm", "ultracell")
+
 
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
@@ -485,11 +492,22 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     See Vinteraction and Jinteraction for further background on the
     density-density and exchange conventions respectively; only the
     plain-mixing solver is supported (unlike Vinteraction/SzSz/SxSx/SySy),
-    and integration is restricted to "ed" (default) or "kpm". Through
-    h.get_mean_field_hamiltonian, integration="qtci" or "triangle" (the
-    linear simplex integration of the Fermi step, dmtk.simplexdm) is
-    routed to scftk.densitydensity.Vinteraction instead, which has the
-    density-density terms (U, V1, V2, V3, Vr) and no exchange terms J.
+    and integration is restricted to "ed" (default), "kpm" or
+    "ultracell". Through h.get_mean_field_hamiltonian, integration="qtci"
+    or "triangle" (the linear simplex integration of the Fermi step,
+    dmtk.simplexdm) is routed to scftk.densitydensity.Vinteraction
+    instead, which has the density-density terms (U, V1, V2, V3, Vr) and
+    no exchange terms J.
+
+    integration="ultracell" is the mean field of an ultracell, a supercell
+    solved in the folded Bloch states of its unit cell
+    (u.get_mean_field_hamiltonian(), ultracelltk/meanfield.py). h0 must be
+    the supercell that carries that basis; it is made sparse and goes
+    through the sparse engine below, with the density matrix at the
+    entries the mean field reads, the Fermi level and the band energy from
+    one diagonalization of the ultracell per kpoint and iteration
+    (ultracelltk.meanfield.SparseBackend). Not for a Nambu or a
+    non-Hermitian h0, nor with a per-site filling.
 
     integration="ed" computes the per-iteration density matrix by exact
     diagonalization -- dense, or restricted to the sparse (direction,row,
@@ -694,14 +712,17 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     mix = 0.3 if mix is None else mix # the plain-mixing factor
     maxite = 1000 if maxite is _MAXITE_UNSET else maxite
     h1 = h0.get_multicell()
-    if integration != "kpm": h1 = h1.get_dense() # see docstring above
+    if integration == "ultracell": h1.turn_sparse() # the sparse engine,
+    # which a supercell solved in its ultracell states always takes
+    elif integration != "kpm": h1 = h1.get_dense() # see docstring above
     # a dense Nambu h1 has no dense KPM route (see the docstring above),
     # so it takes the sparse engine, which gives the dense one's mean field
     # to roundoff, and the result is handed back dense as it came in
     dense_nambu_kpm = integration == "kpm" and h1.has_eh and not h1.is_sparse
     if dense_nambu_kpm: h1.turn_sparse()
-    if integration == "kpm" and h1.is_sparse: # the sparse engine, with
-        # every channel as sparse matrices from a KD-tree (sparsemeanfield)
+    if integration in _SPARSE_ENGINE and h1.is_sparse: # the sparse engine,
+        # with every channel as sparse matrices from a KD-tree
+        # (sparsemeanfield)
         from .sparsemeanfield import interaction, SZSZ
         from .densitydensity import obj2geometryarray
         def channel(Ja): return interaction(h1, Ja, J2, J3, Vr=Jr, rcut=rcut,
@@ -1013,12 +1034,26 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     has_eh = h1.has_eh
     if has_eh:
         from .. import superconductivity
-    if integration not in ("ed", "kpm"):
-        raise ValueError("integration must be 'ed' or 'kpm', got %r" % (integration,))
-    # a sparse h1 with integration="kpm" goes through the sparse engine
-    # (scftk/sparsemeanfield.py): the interaction, the density matrix and
-    # the mean field are sparse matrices, and a Nambu h1 is taken too
-    sparse_kpm = integration == "kpm" and h1.is_sparse
+    if integration not in _INTEGRATIONS:
+        raise ValueError("unknown integration %r for the spin-spin mean "
+                "field; it must be one of %s" % (integration,
+                    list(_INTEGRATIONS)))
+    # a sparse h1 with integration="kpm" or "ultracell" goes through the
+    # sparse engine (scftk/sparsemeanfield.py): the interaction, the
+    # density matrix and the mean field are sparse matrices, and a Nambu
+    # h1 is taken too. sparse_engine is that storage; use_kpm and
+    # use_ultracell below choose how the density matrix, the Fermi level
+    # and the band energy are computed
+    sparse_engine = integration in _SPARSE_ENGINE and h1.is_sparse
+    sparse_kpm = sparse_engine and integration == "kpm"
+    use_ultracell = integration == "ultracell"
+    if use_ultracell:
+        from ..ultracelltk.meanfield import get_basis
+        get_basis(h1) # an ultracell supercell, Hermitian, without Nambu
+        if not h1.is_sparse:
+            raise ValueError("integration=\"ultracell\" runs on the sparse "
+                    "engine and needs a sparse supercell; VJinteraction "
+                    "makes it sparse")
     if integration == "kpm" and has_eh and not sparse_kpm:
         raise NotImplementedError("VJinteraction's integration=\"kpm\" path "
                 "only supports a normal-state (has_eh=False) Hamiltonian "
@@ -1067,6 +1102,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                     "entry must lie in [0,1], got %s" % (filling_arr,))
     else:
         filling_arr = None
+    if array_filling and use_ultracell:
+        raise NotImplementedError("a per-site (array) filling is not "
+                "implemented for integration=\"ultracell\"; use a scalar "
+                "filling or mu=")
     if array_filling and mu is not None:
         raise NotImplementedError("A per-site (array) filling cannot be "
                 "combined with an explicit mu= -- the array-filling branch "
@@ -1124,7 +1163,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # spin-orbital one _build_sparse_pairs assumes, so the Nambu case keeps
     # the existing dense get_dm call below rather than risk misreading that
     # reordering here -- a possible follow-up, not attempted in this pass.
-    use_sparse_dm = not has_eh and not sparse_kpm
+    use_sparse_dm = not has_eh and not sparse_engine
     if use_sparse_dm:
         n_dm = vz[(0, 0, 0)].shape[0]
         sparse_pairs = _build_sparse_pairs(
@@ -1160,7 +1199,33 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # (see VJinteraction's docstring) -- keep_sparse gates the per-iteration
     # re-sparsification below that stops the mean-field update from
     # silently densifying it again.
-    keep_sparse = use_kpm and h1.is_sparse
+    keep_sparse = sparse_engine
+    if sparse_engine: # the entries every channel reads, computed once
+        from . import sparsemeanfield
+        from scipy.sparse import csr_matrix
+        n_dm = h1.intra.shape[0]
+        channels = [v for (v, active) in [(vz, vz_active), (vx, vx_active),
+                (vy, vy_active), (vd, vd_active)] if active]
+        # on whole 2x2 blocks when a channel is decoupled in a rotated
+        # frame (see needed_entries)
+        sparse_needed = sparsemeanfield.needed_entries(channels, n_dm,
+                has_eh=has_eh, blocks=vx_active or vy_active)
+        if array_filling: # the per-site occupation reads every diagonal
+            r0, c0 = sparse_needed.get((0, 0, 0), (np.zeros(0, int),)*2)
+            key = np.unique(np.concatenate([r0*n_dm + c0,
+                    np.arange(n_dm)*(n_dm + 1)]))
+            sparse_needed[(0, 0, 0)] = (key//n_dm, key % n_dm)
+
+        def _pad_dm(dm):
+            """An empty matrix in every direction the mean field asks for
+            and its opposite, where no entry was needed"""
+            for d in list(v_dirs) + [tuple(-x for x in d) for d in v_dirs]:
+                if d not in dm:
+                    dm[d] = csr_matrix((n_dm, n_dm), dtype=np.complex128)
+            return dm
+    if use_ultracell: # the folded Bloch states, see ultracelltk.meanfield
+        from ..ultracelltk.meanfield import SparseBackend
+        ultracell = SparseBackend(nk=nk, T=T)
     if use_kpm:
         from ..kpmtk.densitymatrix_kpm import (DEFAULT_NPOL, LaggedFermi,
                 _dm_kpm_from_needed, get_total_energy_kpm)
@@ -1177,31 +1242,14 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 scale=scale, npol=npol, ne=ne, cores=cores, T=T,
                 kpm_prec=kpm_prec, radius=kpm_radius)
         if sparse_kpm:
-            from . import sparsemeanfield
-            from scipy.sparse import csr_matrix
             from ..kpmtk.densitymatrix_kpm import (get_dm_kpm_sparse,
                     get_band_energy_kpm)
-            n_dm = h1.intra.shape[0]
-            channels = [v for (v, active) in [(vz, vz_active), (vx, vx_active),
-                    (vy, vy_active), (vd, vd_active)] if active]
-            # the entries every channel reads, on whole 2x2 blocks when a
-            # channel is decoupled in a rotated frame (see needed_entries)
-            sparse_needed = sparsemeanfield.needed_entries(channels, n_dm,
-                    has_eh=has_eh, blocks=vx_active or vy_active)
-            if array_filling: # the per-site occupation reads every diagonal
-                r0, c0 = sparse_needed.get((0, 0, 0), (np.zeros(0, int),)*2)
-                key = np.unique(np.concatenate([r0*n_dm + c0,
-                        np.arange(n_dm)*(n_dm + 1)]))
-                sparse_needed[(0, 0, 0)] = (key//n_dm, key % n_dm)
 
             def _get_dm_kpm(h, trace=False): # see the dense one below
                 out = get_dm_kpm_sparse(h, sparse_needed, nk=nk, scale=scale,
                         npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec,
                         trace=trace, radius=kpm_radius)
-                dm = out[0] if trace else out
-                for d in list(v_dirs) + [tuple(-x for x in d) for d in v_dirs]:
-                    if d not in dm:
-                        dm[d] = csr_matrix((n_dm, n_dm), dtype=np.complex128)
+                _pad_dm(out[0] if trace else out)
                 return out
         else: kpm_needed = _sparse_pairs_to_needed(sparse_pairs)
 
@@ -1286,7 +1334,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         new has_eh-dependent kwarg) only needs updating in one place. See
         compute_mf's docstring for why vz/vx/vy (and, below, vd) now all go
         through this."""
-        if sparse_kpm: return sparsemeanfield.get_mf(v, dm, has_eh=has_eh)
+        if sparse_engine: return sparsemeanfield.get_mf(v, dm, has_eh=has_eh)
         return get_mf(v, dm, has_eh=has_eh, non_hermitian=non_hermitian)
 
     def compute_mf(dm_lab):
@@ -1391,6 +1439,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             else:
                 h.shift_fermi(-mu)
                 dm_lab = _get_dm_kpm(h)
+        elif use_ultracell:
+            # one diagonalization of the ultracell per kpoint gives both the
+            # Fermi level and the density matrix, as
+            # full_dm_accumulate_sparse_with_fermi does for "ed" below
+            if mu is None:
+                dm_lab, fermi = ultracell.dm_with_fermi(h, sparse_needed,
+                        filling)
+                h.fermi = fermi
+                h.shift_fermi(-fermi) # the eigenvectors are unaffected
+            else:
+                h.shift_fermi(-mu)
+                dm_lab = ultracell.dm(h, sparse_needed)
+            _pad_dm(dm_lab)
         elif use_sparse_dm and mu is None and array_filling:
             # per-site filling: no scalar Fermi shift trick available (see
             # densitymatrix.full_dm_accumulate_sparse_local_fermi's
@@ -1515,7 +1576,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # to both -- this call site's own scale=1e-1 predates that helper
         # existing at all, kept as-is rather than switched to the helper's
         # own 1.0 default.
-        if sparse_kpm: # on the pairs of sites some channel couples
+        if sparse_engine: # on the pairs of sites some channel couples
             from ..multihopping import MultiHopping as _MH
             union = sum([_MH({d: abs(m) for (d, m) in v.items()})
                 for v in [vz, vx, vy] + ([vd] if vd is not None else [])],
@@ -1653,10 +1714,16 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # from compute_mf on the lab-frame density matrix, which sums every
     # channel's rotated decoupling (superscf.get_dc_energy_anomalous).
     h = scf.hamiltonian
-    if sparse_kpm:
-        # Tr(H rho) from the KPM density matrix on the hoppings, which also
-        # takes a Nambu h, and the sparse double countings
+    if sparse_engine: # the sparse double countings
         get_dc_energy = lambda v, dm, **kw: sparsemeanfield.get_dc_energy(v, dm)
+    if use_ultracell:
+        # the occupied ultracell levels of the last density matrix, at T=0
+        # as the ED energy
+        etot = ultracell.band_energy(h)
+        ultracell.release()
+    elif sparse_kpm:
+        # Tr(H rho) from the KPM density matrix on the hoppings, which also
+        # takes a Nambu h
         etot = get_band_energy_kpm(h, nk=nk, scale=scale, npol=npol, ne=ne,
                 cores=cores, T=0., kpm_prec=kpm_prec,
                 radius=kpm_radius) # as the ED energy, T=0
@@ -1708,7 +1775,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # the pairing part of every channel at once: compute_mf is the sum
         # of the rotated channel decouplings, so its anomalous blocks are
         # the full anomalous mean field (see get_dc_energy_anomalous)
-        if sparse_kpm:
+        if sparse_engine:
             etot += sparsemeanfield.get_dc_energy_anomalous(
                     compute_mf(scf.dm), scf.dm)
         else:

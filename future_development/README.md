@@ -720,7 +720,13 @@ already reached once.
   stage 1, harmonics of functions in stage 3), three more taken as the
   recommended defaults in stage 1 (`emax=`, per unit cell,
   `get_ultracell`), and the basis of the mean field, rebuilt from its
-  lattice-periodic part, decided on the measurement of stage 2.
+  lattice-periodic part, decided on the measurement of stage 2. Since 15
+  November 2026 a spinful ultracell runs on the sparse engine of
+  `VJinteraction`, with the exchange `J1` to `Jr` and no dense supercell in
+  the loop, one diagonalization per kpoint and iteration (a 2304-orbital
+  call from 30 s to 15 s). Open: the spinless loop on the sparse engine,
+  and two decisions with a recommendation, Nambu with a cut (left until
+  `window=`) and the zero net moment of the paper (a named constraint).
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

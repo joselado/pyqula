@@ -143,12 +143,46 @@ an in-plane moment of $10^{-16}$. To make the mesh per direction possible, the u
 observables now take `nk` as one number or one per direction, as `klist.kmesh` does.
 
 Open after stage 2: the spin-spin exchange `J1`, `J2`, `J3`, `Jr` (refused with a
-`NotImplementedError`; only `VJinteraction` has it, and it fixes
+`NotImplementedError`; only `VJinteraction` has it, and it fixed
 `integration="ed"` for its own loop); Nambu; the constraint
 $\int\mathbf m_{\mathbf Q=0}=0$; and size, since the loop of `generic_densitydensity`
 makes the supercell dense (`get_dense`), so its memory grows as $(N N_\mathrm{orb})^2$ per
-direction whatever the cut. The ultracell mean field is therefore for supercells of up to a
-few thousand orbitals until stage 3.
+direction whatever the cut.
+
+## The spinful mean field on the sparse engine (15 November 2026)
+
+The exchange and the size were solved together, on a decision taken by a Fable agent for
+the maintainer. `VJinteraction` already had a sparse engine for the KPM
+(`scftk/sparsemeanfield.py`): the interaction from a KD-tree, the density matrix at the
+entries the mean field reads as csr matrices, the mean field sparse, Nambu included. Its
+gate mixed two things, the sparse storage and the KPM numerics (the lagged Fermi level,
+the band energy from the Chebyshev moments). It is now split: `sparse_engine` is the
+storage, for `integration="kpm"` or `"ultracell"` on a sparse Hamiltonian, and the
+ultracell supplies its own numerics with `ultracelltk.meanfield.SparseBackend`, which
+diagonalizes the ultracell once per kpoint and returns the csr density matrix with the
+Fermi level, as `full_dm_accumulate_sparse_with_fermi` does for "ed", and the band energy
+from the same states. A spinful ultracell always takes this engine, so it has `J1`, `J2`,
+`J3`, `Jr` and no dense matrix of the supercell in the loop. A spinless one stays on the
+dense loop of `generic_densitydensity`, since `VJinteraction` is spinful only.
+
+Tests: the backend's entries against the dense density matrix of the same states to
+$10^{-12}$ at $d$ and $-d$, with and without a cut, and with every state against "ed" on
+the supercell to $10^{-8}$; $U$ and $J_1$ from a tilted guess against "ed" on the
+supercell, energy to $10^{-8}$, with an in-plane moment above 0.05; the cut converging
+with `emax` with $U$ and $J_1$. Two facts found on the way. The two engines stop at
+different distances from the same fixed point, so a comparison at $10^{-8}$ needs
+`maxerror` well below it: at $10^{-9}$ they differed by $8\times10^{-8}$ in energy, at
+$10^{-12}$ by $8\times10^{-11}$. And a staggered moment tilted from $z$, with $U$ alone,
+relaxes by about 0.5% per iteration in both engines alike, with errors equal to $10^{-14}$
+over 300 iterations, so it is a slow mode of that state and not of the ultracell.
+
+Still open: the spinless loop on the sparse engine of `generic_densitydensity_kpm`, whose
+`fermi=` is already an object that an exact Fermi level fits, and then the removal of the
+three ultracell branches of `scftk/densitydensity.py`; the entry `Vinteraction_kpm` for a
+spinless sparse loop is named after the KPM and would carry the ultracell too. Nambu and
+the constraint are decisions 6 and 7 below. The new wall is the time of the dense `eigh` of
+the ultracell matrix, about 5000 kept states, and its eigenvectors, which are quadratic in
+the kept states.
 
 ## The method, and what it becomes in a tight-binding basis
 
@@ -435,3 +469,22 @@ Each comes with a recommendation; they are handed over one at a time.
    iteration, or keeps the basis of the clean `h` frozen as Elk does. Measured in stage 2
    (see "What stage 2 built") and decided by the maintainer on 14 November 2026: rebuilt by
    default, with the clean basis as an option.
+6. The basis of a Nambu mean field with a cut. With $E\le E_\mathrm{max}$ on the BdG
+   states every negative level is kept, at least half of all the states, so the cut never
+   buys more than a factor 2, and the kept space is not closed under particle-hole
+   symmetry. Only $|E|\le E_\mathrm{max}$ scales, and it needs a frozen density for the
+   deep states, which is the `window=` question of decision 2. Without a cut the
+   ultracell is the supercell in another basis and buys nothing over "ed". Recommendation
+   of the Fable agent on 15 November 2026: leave Nambu until decision 2 is taken. The sparse
+   engine already takes Nambu, so what would remain is the Fermi level of the paired state
+   (`superscf.BdGFermiLevel`) and the band energy of a BdG Hamiltonian.
+7. The constraint $\int\mathbf m_{\mathbf Q=0}=0$ of the paper. It is a zero net moment
+   and not specific to the ultracell. The recommended form is a named constraint of
+   `scftk/mfconstrains.py`, for instance `"no_net_moment"` in `constrains=`, which removes
+   the site average of the spin part of the onsite mean field; `_set_entries` takes csr,
+   so it works on the sparse engine. It removes the uniform exchange field, not the
+   uniform moment itself, and the two agree only for a uniform $U$ and in linear response.
+   The exact form is a Lagrange field co-converged with the loop, one more unknown of the
+   kind that caused trouble in the Kondo-lattice loop. No case is known yet where the loop
+   falls to the ferromagnet without it, so there is no test that could fail; left for the
+   maintainer, with that recommendation.

@@ -81,10 +81,18 @@ class Ultracell():
         matrix, the Fermi level and the band energy of every iteration
         computed in the ultracell states (integration="ultracell"). It takes
         the keywords of h.get_mean_field_hamiltonian() for a normal-state
-        Hamiltonian: U, V1, V2, V3, Vr, filling or mu, mf, nk (the mesh of
-        the ultracell, 1 by default), T, mix, maxerror, maxite, ...
+        Hamiltonian: U, V1, V2, V3, Vr, and for a spinful one the spin-spin
+        exchange J1, J2, J3, Jr (J1x, J1y, J1z), filling or mu, mf, nk (the
+        mesh of the ultracell, 1 by default), T, mix, maxerror, maxite, ...
         Returns the Ultracell of the converged mean-field supercell, with
         the same basis, and its total energy with return_total_energy=True.
+
+        A spinful supercell runs on the sparse engine of the spin-spin mean
+        field (scftk.spinspin), whose interaction, density matrix and mean
+        field are sparse matrices, so the loop needs no dense matrix of the
+        supercell; what grows with the size is the ultracell matrix of the
+        kept states. A spinless one runs on the dense loop of
+        scftk.densitydensity.
 
         rebuild_basis=True (the default) rebuilds the basis at every
         iteration from the lattice-periodic part of the current
@@ -102,11 +110,10 @@ class Ultracell():
                     "electron-hole (Nambu) degree of freedom")
         exchange = [k for k in ("J1","J2","J3","Jr","J1x","J1y","J1z")
                 if kwargs.get(k) is not None and np.any(kwargs.get(k)!=0.)]
-        if len(exchange)>0:
-            raise NotImplementedError("the spin-spin exchange "
-                    +str(exchange)+" is not implemented for the ultracell, "
-                    "whose mean field takes the density-density "
-                    "interactions U, V1, V2, V3 and Vr")
+        if len(exchange)>0 and not self.hs.has_spin:
+            from . import check
+            check.require_spin(self.hs,"the spin-spin exchange "
+                    +str(exchange))
         hs = self.hs.copy()
         hs.ultracell_basis = basistk.FoldedBasis(self.h,hs,emax=self.emax)
         hs.ultracell_basis.rebuild = bool(rebuild_basis)

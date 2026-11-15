@@ -608,13 +608,14 @@ supercell, that returns the ultracell matrix.
 The self-consistent mean field of the supercell, with the density matrix,
 the Fermi level and the band energy of every iteration computed in the
 ultracell states. With every state kept it is the mean field of the
-supercell. Normal state only, without the spin-spin exchange (`J1`, `J2`,
-`J3`, `Jr`).
+supercell. Normal state only.
 
 Optional arguments:
 
 - U, V1, V2, V3, Vr, filling, mu, mf, T, mix, maxerror, maxite: as in
   `h.get_mean_field_hamiltonian()`
+- J1, J2, J3, Jr: the spin-spin exchange, as in
+  `h.get_mean_field_hamiltonian()`, for a spinful Hamiltonian
 - nk=1: k-mesh of the ultracell, one number or one per direction
 - rebuild_basis=True: rebuild the basis at each iteration from the
   lattice-periodic part of the mean field; `False` keeps the states of the

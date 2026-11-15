@@ -942,13 +942,14 @@ class Hamiltonian():
     @get_docstring(VJinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,
             integration="ed",**kwargs):
-        if self.has_spin and integration in ("ed","kpm"):
+        if self.has_spin and integration in ("ed","kpm","ultracell"):
             scf = VJinteraction(self,integration=integration,**kwargs)
         else:
             # VJinteraction requires has_spin (spin-spin exchange has no
             # meaning for a spinless Hamiltonian -- see its own has_spin
-            # check) and only supports integration="ed"/"kpm" (no
-            # qtci/solver zoo); fall back for the remaining combinations to
+            # check) and only supports integration="ed"/"kpm"/"ultracell"
+            # (no qtci/solver zoo); fall back for the remaining
+            # combinations (a spinless ultracell among them) to
             # whichever of Vinteraction/Vinteraction_kpm supports this
             # integration mode -- Vinteraction itself never learned "kpm"
             # (that is Vinteraction_kpm's own separate entry point), so

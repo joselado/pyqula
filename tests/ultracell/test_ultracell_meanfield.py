@@ -36,8 +36,8 @@ def test_hubbard_every_state_is_the_supercell(rebuild):
     x = fractional(hs.geometry)
     hs.add_onsite(lambda r: 0.2*np.cos(2*np.pi*x(r)[0]))
     u = h.get_ultracell(hs)
-    kw = dict(U=3.0,filling=0.5,mf="antiferro",nk=2,maxerror=1e-9,verbose=0,
-            write=False)
+    kw = dict(U=3.0,filling=0.5,mf="antiferro",nk=2,maxerror=1e-11,verbose=0,
+            write=False) # well below the 1e-8 the two engines are held to
     u2,e2 = u.get_mean_field_hamiltonian(return_total_energy=True,
             rebuild_basis=rebuild,**kw)
     h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
@@ -67,6 +67,67 @@ def test_bond_interaction_every_state_is_the_supercell():
             integration="ed",**kw)
     assert abs(e2-e3)<1e-8
     assert same_state(u2,h3,k=(0.37,0.,0.))<1e-7
+
+
+def canted_guess(hs,theta=0.4):
+    """A staggered moment tilted by theta from z towards x, as the onsite
+    matrix of the mean field, so that the x and y channels of an isotropic
+    exchange are active from the first iteration"""
+    from pyqula.ultracelltk.basis import dense
+    hg = hs.copy() ; hg.turn_dense()
+    m0 = dense(hg.intra).copy()
+    r0 = np.array(hs.geometry.r)
+    sub = np.array(hs.geometry.sublattice)
+    def ex(r):
+        s = sub[np.argmin(np.sum((r0-np.array(r))**2,axis=1))]
+        return [0.5*s*np.sin(theta),0.,0.5*s*np.cos(theta)]
+    hg.add_exchange(ex)
+    return {(0,0,0): dense(hg.intra)-m0}
+
+
+def test_exchange_every_state_is_the_supercell():
+    """The spin-spin exchange J1 has Fock terms on the bonds in every spin
+    channel; with every state kept the sparse engine on the ultracell
+    states must converge to the mean field of "ed" on the supercell from
+    the same tilted guess. Without J1 the same guess relaxes slowly in
+    both engines alike, by 0.5% per iteration, so it is not used"""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    hs = h.get_supercell([3,2])
+    x = fractional(hs.geometry)
+    hs.add_onsite(lambda r: 0.2*np.cos(2*np.pi*x(r)[0]))
+    u = h.get_ultracell(hs)
+    kw = dict(U=2.5,J1=0.4,filling=0.5,nk=2,maxerror=1e-11,verbose=0,
+            write=False)
+    u2,e2 = u.get_mean_field_hamiltonian(return_total_energy=True,
+            mf=canted_guess(hs),**kw)
+    h3,e3 = hs.get_mean_field_hamiltonian(return_total_energy=True,
+            integration="ed",mf=canted_guess(hs),**kw)
+    assert abs(e2-e3)<1e-8
+    assert same_state(u2,h3)<1e-7
+    mx = u2.get_vev(operator="sx",nk=2)
+    assert np.max(np.abs(mx))>0.05 # a non-collinear guess stays tilted
+
+
+def test_exchange_cut_converges():
+    """With U and J1, the rebuilt basis converges to the full result as
+    emax grows, from above"""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    n = 4
+    hs = h.get_supercell([n,1])
+    x = fractional(g)
+    hs.add_onsite(lambda r: 0.3*np.cos(2*np.pi*x(r)[0]/n))
+    kw = dict(U=2.5,J1=0.4,filling=0.5,mf="antiferro",nk=2,maxerror=1e-8,
+            verbose=0,return_total_energy=True,write=False)
+    u0,e0 = h.get_ultracell(hs).get_mean_field_hamiltonian(**kw)
+    err = []
+    for emax in [1.0,1.5,2.5]:
+        u2,e = h.get_ultracell(hs,emax=emax).get_mean_field_hamiltonian(**kw)
+        err.append(abs(e-e0))
+        assert e>=e0-1e-8 # the cut cannot go below the full basis
+    assert err[0]>err[1]>err[2]
+    assert err[2]<1e-3
 
 
 def test_linear_response_is_the_rpa_about_the_mean_field():
@@ -155,8 +216,10 @@ def test_mean_field_wrong_inputs_raise():
     with pytest.raises(ValueError): # a plain supercell has no ultracell basis
         hs.get_mean_field_hamiltonian(U=1.,integration="ultracell",verbose=0,
                 write=False)
-    with pytest.raises(NotImplementedError): # no spin-spin exchange
-        h.get_ultracell(hs).get_mean_field_hamiltonian(J1=1.,write=False)
+    hl = geometry.chain().get_hamiltonian(has_spin=False)
+    with pytest.raises(ValueError): # the exchange needs spin
+        hl.get_ultracell(hl.get_supercell(3)).get_mean_field_hamiltonian(
+                J1=1.,write=False)
     hn = h.copy() ; hn.setup_nambu_spinor()
     with pytest.raises(NotImplementedError):
         hn.get_ultracell(hn.get_supercell([2,2])).get_mean_field_hamiltonian(
