@@ -27,24 +27,35 @@ def ultracell_matrix(basis,hk,kS,E,U,valid):
     """The ultracell matrix at kS, on the kept states in the order of
     valid.ravel() (folded momentum first, then level), from the supercell
     Bloch Hamiltonian hk = H_S(k_S) and the states of basis.states(kS)"""
-    N,bmax = valid.shape
     counts = np.sum(valid,axis=1) # kept at each momentum, the first ones
     offsets = np.concatenate([[0],np.cumsum(counts)])
     rows = valid.ravel()
     # column order, the one of LAPACK, so that eigh can work on H in place
     H = np.zeros((offsets[-1],offsets[-1]),dtype=np.complex128,order="F")
     for g0,g1 in momentum_groups(basis,counts): # consecutive momenta q'
-        B = np.hstack([basis.basis_block(kS,U,iq)[:,0:counts[iq]]
-            for iq in range(g0,g1)]) # their basis vectors, (norbs,nb)
-        Y = np.asarray(hk@B) # H_S applied to the basis vectors
-        Yq = basis.from_supercell(kS,Y) # (N,norb,nb), components at every q
-        blocks = np.einsum("qam,qan->qmn",np.conjugate(U),Yq) # U_q^dag Y_q
-        H[:,offsets[g0]:offsets[g1]] = blocks.reshape(N*bmax,-1)[rows]
+        H[:,offsets[g0]:offsets[g1]] = group_columns(basis,hk,kS,U,counts,
+                g0,g1)[rows]
     # Hermitian up to rounding; in place, so that only one more matrix of
     # this size is alive (the conjugate transpose is built first)
     H += np.conjugate(H.T)
     H *= 0.5
     return H
+
+
+def group_columns(basis,hk,kS,U,counts,g0,g1):
+    """The columns of the ultracell matrix of the consecutive momenta q'
+    from g0 to g1, at every row of the padded layout, (N*bmax,nb). Each
+    temporary is dropped once it is used, and all of them on return, so
+    that at most two arrays of the size of the group are alive at once
+    outside basis.from_supercell"""
+    B = np.hstack([basis.basis_block(kS,U[:,:,0:counts[iq]],iq)
+        for iq in range(g0,g1)]) # their basis vectors, (norbs,nb)
+    Y = np.asarray(hk@B) # H_S applied to the basis vectors
+    del B
+    Yq = basis.from_supercell(kS,Y) # (N,norb,nb), components at every q
+    del Y
+    blocks = np.einsum("qam,qan->qmn",np.conjugate(U),Yq) # U_q^dag Y_q
+    return blocks.reshape(U.shape[0]*U.shape[2],-1)
 
 
 def momentum_groups(basis,counts):
