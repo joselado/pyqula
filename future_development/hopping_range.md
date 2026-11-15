@@ -13,7 +13,14 @@ function or a generator in 1D and 2D is built as multicell. Both are evaluated o
 `specialhopping.cells_within(g,rcut)`, every cell with a pair of sites within `rcut=5.0`, unless
 a box of cells is asked for with `nc=` or `cutoff=` (the same thing, both at once is a
 TypeError); `nc` defaults to `None` now, it was 2. A large cell still builds its neighbor cells
-only. A Hermitian Hamiltonian is evaluated on one cell $R$ of each pair $R,-R$ (the first
+only. This is not the hard cut of the option as written below ("each distance shell kept or
+dropped whole"): `rcut` selects the cells, and every pair of sites of a selected cell is
+evaluated, so on a cell of several sites a shell just beyond `rcut` is kept in part, chosen by
+the extent of the cell, which can break a rotation. A hopping that reaches beyond `rcut` needs a
+larger `rcut`; a cut of every pair at `rcut` is a decision left to the maintainer, since it
+would drop tails that the builders kept before. Two paths still ignore `rcut=` without a word,
+where it was a TypeError before: a list `tij=[...]`, which sets its own box of cells, and a
+generator with `nc=` or `cutoff=`. A Hermitian Hamiltonian is evaluated on one cell $R$ of each pair $R,-R$ (the first
 nonzero index positive) and the hopping to $-R$ is the adjoint, which is what the single-cell
 storage did. This matters for a function that is reciprocal but not periodic in the lattice:
 `specialhamiltonian.topological_heavy_fermion_1d` takes the sign of a hopping from the position
@@ -81,7 +88,9 @@ path, so `tij=f, rcut=8` still visits the 9 cells.
    Kekule are first-neighbor only and safe.
 
 Also seen: `add_pairing` with a function loops over `neighbor_directions()` with
-`geometry.ncells=2`, so a pairing beyond two cells is lost; `spinwaves.set_couplings` calls
+`geometry.ncells=2`, so a pairing beyond two cells is lost (since bfa3e2c a pairing of known
+range takes every cell within it; a callable `mode` still visits the box, recorded in
+`bug_audit_8.md`); `spinwaves.set_couplings` calls
 `parametric_hopping` without `fc` and is broken. Safe: every list `tij`, functions with
 `is_multicell=True` (box of $\pm5$ and `rcut=5.0`) of first-neighbor range, the single-cell
 storage of first-neighbor or purely vertical couplings in a reduced cell, `add_strain` and

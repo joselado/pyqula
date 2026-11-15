@@ -104,6 +104,15 @@ already reached once.
   embedding has a density matrix, the qtci DOS and LDOS do not depend on
   the zero or the unit of energy), and what is still open.
 
+- [`bug_audit_8.md`](bug_audit_8.md) -- the eighth sweep, 15 November 2026:
+  ten areas read without running (the ultracell, the two mean-field engines,
+  the classical couplings, the Kondo lattice, KPM and response, the loops
+  over a fixed box of cells), 17 repairs committed with a refuting reader on
+  each, and the 41 real findings left, each with its concrete case: among
+  them a supercell matrix with large entries that loses atoms, an energy cut
+  that empties one momentum of the mesh, KPM keywords ignored in silence by
+  the ultracell engines, and a Kondo total energy that mixes T=0 and T.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the

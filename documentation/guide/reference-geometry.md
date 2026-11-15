@@ -23,8 +23,9 @@ Optional arguments
 - nc=None: the cells a function or a generator is evaluated on,
   $|n_i|\le$ `nc` along each lattice vector (`cutoff=` is the same);
   `None` is every cell that holds a pair of sites within `rcut`
-- rcut=5.0: the distance that sets those cells. A hopping that reaches
-  farther needs a larger `rcut`
+- rcut=5.0: the distance that sets those cells. Every pair of sites of
+  such a cell is evaluated, so a hopping that reaches farther is kept only
+  in part and needs a larger `rcut`
 
 A misspelled keyword raises `TypeError` with the list of accepted ones.
 
