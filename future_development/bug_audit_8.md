@@ -193,7 +193,11 @@ about 1, so the times are a ratio. Every result is the same as before:
   nothing visible here. The copy of the weighted states a chunk at a time in `site_sum` made
   `u.get_ldos()` and `u.get_vev()` worse, from 301 to 335 MB and from 248 to 273 MB of peak: at
   this size one chunk holds every kept state, so the full eigenvectors stayed alive beside the
-  copy. It was reverted, and the two peaks are back at 301 and 248 MB.
+  copy. It was reverted, and the two peaks are back at 301 and 248 MB. With a chunk smaller
+  than the kept states (`chunk_entries=2**20`, 455 states) the copy of the kept columns is
+  still lower, 154 to 143 MB and 162 to 145 MB. The case of 9216 orbitals and 4684 kept states
+  was not measured; counting the arrays, the two shapes give about the same peak there, two
+  copies of the eigenvectors against one copy and a chunk of real-space states.
 
 The optimization of the Kondo density-matrix entries, held on the branch
 `held/kondo-dm-entries`, was not timed.
