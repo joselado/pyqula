@@ -266,7 +266,11 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
         every iteration, never approaching 1, when T=1e-7 was tried here.
         Scaling the step by T below keeps the effective gain ~mix
         regardless of T, restoring the stability the plain update has in
-        the RVB case.
+        the RVB case. The converged Hamiltonian keeps T and nk, as
+        h.temperature and h.nk like the other mean-field loops, so its
+        density matrix and its filling are read at the T of the loop
+        (densitymatrix.default_smearing) and n_f read from it is the
+        constrained one.
     """
     Q = 1.0 # target f-occupancy for a spin-1/2 (N=2) local moment
     bonds = kondo_bonds(h0, pairs, J, rcut=rcut)
@@ -275,6 +279,8 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, rcut=None, filling=0.5,
     Rb = [tuple(int(x) for x in b[2]) for b in bonds] # cell of the c site
     Jg = np.array([b[3] for b in bonds], dtype=np.float64)/2.0 # J/N, N=2
     h1 = h0.get_dense()
+    h1.nk = nk # the mesh and the smearing of the loop, which the
+    h1.temperature = T # observables of the converged h read it at
     hop0 = h1.get_dict()
     mu = h1.get_fermi4filling(filling, nk=nk) # fixed once, from the bare bands
     V, lam = _seed(mf, len(bonds), len(pairs))

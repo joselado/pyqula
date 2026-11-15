@@ -121,6 +121,28 @@ def test_local_occupation_is_one_nonuniform_supercell():
     assert not np.isclose(h2.hybridization[0], h2.hybridization[1], atol=1e-2)
 
 
+def test_observables_read_the_occupations_of_the_loop():
+    """The loop occupies the states at the smearing T, and the constraint
+    makes n_f one at that T. The converged Hamiltonian keeps T and the
+    k-mesh, as h2.temperature and h2.nk, so a density matrix read from it
+    without a T is the one of the loop and gives back n_f = 1. Read at the
+    smearing 1e-6 of a Hamiltonian that is not a mean field, the heavy
+    states near the Fermi level change their occupation and n_f is not
+    the constrained one"""
+    h = _chain()
+    nk, T = 120, 0.02
+    seed = (np.array([0.3+0.0j]), np.array([0.0]))
+    h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=nk, T=T,
+            mf=seed, mix=0.3, maxerror=1e-10, maxite=5000)
+    assert abs(h2.hybridization[0]) > 0.1 # the Kondo branch
+    assert h2.temperature == T and h2.nk == nk
+    (c, f) = h._kondo_pairs[0]
+    dm = h2.get_density_matrix(nk=nk) # at the T the loop kept
+    nf = (dm[2*f, 2*f] + dm[2*f+1, 2*f+1]).real
+    assert abs(nf - h2.local_occupation[0]) < 1e-10, (nf, h2.local_occupation)
+    assert abs(nf - 1.) < 1e-8, nf
+
+
 def test_kondo_branch_has_lower_energy_than_trivial_branch():
     """Above the hybridization threshold, V=0 (unseeded) and a genuine
     Kondo state (seeded) are BOTH self-consistent solutions of Eq. 77 (see
